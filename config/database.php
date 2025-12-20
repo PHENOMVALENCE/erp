@@ -34,8 +34,8 @@ define('BASE_PATH', dirname(__DIR__));
 
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'mkumbi_erp');
-define('DB_USER', 'mkumbi_user');
-define('DB_PASS', 'SAntus98**');
+define('DB_USER', 'root');
+define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
 // ====================================================================
