@@ -2,7 +2,7 @@
 define('APP_ACCESS', true);
 session_start();
 
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/config/database.php';
 
 // Store user info before clearing session
 $user_id = $_SESSION['user_id'] ?? null;

@@ -2,7 +2,7 @@
 /**
  * Main Configuration & Bootstrap File
  * Works on ANY URL automatically
- * Save as: config.php or bootstrap.php
+
  */
 
 defined('APP_ACCESS') or die('Direct access not permitted');
