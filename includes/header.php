@@ -643,7 +643,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Chart of Accounts</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/accounts_comprehensive.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Accounts by Level</span></a></li>
+                            <!-- accounts_comprehensive.php not yet available -->
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/journal.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Journal Entries</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/ledger.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>General Ledger</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/trial.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Trial Balance</span></a></li>
