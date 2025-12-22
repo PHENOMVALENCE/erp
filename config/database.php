@@ -33,7 +33,7 @@ define('BASE_PATH', dirname(__DIR__));
 // ====================================================================
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'mkumbi_erp_v2');
+define('DB_NAME', 'mkumbi_erp_v4');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');

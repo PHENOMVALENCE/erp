@@ -27,7 +27,7 @@ if (!$employee) {
 }
 
 // Check for existing pending/active loans
-$sql = "SELECT el.*, lt.loan_type_name 
+$sql = "SELECT el.*, lt.type_name as loan_type_name 
         FROM employee_loans el 
         JOIN loan_types lt ON el.loan_type_id = lt.loan_type_id
         WHERE el.employee_id = ? AND el.status IN ('PENDING', 'APPROVED', 'DISBURSED', 'ACTIVE')";

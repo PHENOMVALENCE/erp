@@ -31,7 +31,7 @@ $status_filter = $_GET['status'] ?? '';
 $year_filter = $_GET['year'] ?? date('Y');
 
 // Get all loans for this employee
-$sql = "SELECT el.*, lt.loan_type_name, lt.interest_rate,
+$sql = "SELECT el.*, lt.type_name as loan_type_name, lt.interest_rate,
                (SELECT COUNT(*) FROM loan_payments lp WHERE lp.loan_id = el.loan_id) as payments_count,
                (SELECT SUM(amount_paid) FROM loan_payments lp WHERE lp.loan_id = el.loan_id) as total_paid
         FROM employee_loans el

@@ -211,6 +211,11 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             to { opacity: 1; transform: translateY(0); }
         }
         
+        .nav-link.has-dropdown { 
+            cursor: pointer;
+            user-select: none;
+        }
+        
         .nav-link.has-dropdown::after { 
             margin-left: auto; 
             content: "\f105"; 
@@ -218,6 +223,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             font-weight: 900; 
             transition: transform 0.3s;
             font-size: 12px;
+            pointer-events: none;
         }
         
         .nav-item.menu-open > .nav-link.has-dropdown::after { 
@@ -618,7 +624,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/request.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Request Cash</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Accounts</span></a></li>
+                            <!-- petty_cash/accounts.php not yet available -->
                         </ul>
                     </li>
 
@@ -719,7 +725,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Categories</span></a></li>
+                            <!-- assets/categories.php not yet available -->
                         </ul>
                     </li>
 
@@ -779,7 +785,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/generate.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Run Payroll</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payslips.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payslips</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/history.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>History</span></a></li>
+                            <!-- payroll/history.php not yet available -->
                         </ul>
                     </li>
 
@@ -800,18 +806,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         </ul>
                     </li>
 
-                    <!-- Documents -->
-                    <li class="nav-item <?php echo ($current_module == 'documents') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-folder-open"></i>
-                            <span>Documents</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/documents/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Documents</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/documents/templates.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Templates</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/documents/shared.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Shared Documents</span></a></li>
-                        </ul>
-                    </li>
+                    <!-- Documents module not yet available -->
 
                     <!-- ANALYTICS SECTION -->
                     <li class="nav-header">ANALYTICS</li>
@@ -824,25 +819,14 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Reports Hub</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/sales.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Sales Reports</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/financial.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Financial Reports</span></a></li>
+                            <!-- reports/sales.php not yet available -->
+                            <!-- reports/financial.php not yet available -->
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/payroll-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll Summary</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/customers.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Customer Reports</span></a></li>
+                            <!-- reports/customers.php not yet available -->
                         </ul>
                     </li>
 
-                    <!-- Analytics Dashboard -->
-                    <li class="nav-item <?php echo ($current_module == 'analytics') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-chart-line"></i>
-                            <span>Analytics</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/analytics/overview.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Overview</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/analytics/performance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Performance Metrics</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/analytics/forecasting.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Forecasting</span></a></li>
-                        </ul>
-                    </li>
+                    <!-- Analytics module not yet available -->
 
                     <!-- SYSTEM SECTION -->
                     <li class="nav-header">SYSTEM</li>
@@ -859,17 +843,11 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/company.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Company Profile</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/roles.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Roles & Permissions</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/integrations.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Integrations</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/backup.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Backup & Restore</span></a></li>
+                            <!-- settings/backup.php not yet available -->
                         </ul>
                     </li>
 
-                    <!-- Audit Trail -->
-                    <li class="nav-item">
-                        <a href="<?php echo $base_path; ?>modules/audit/index.php" class="nav-link">
-                            <i class="nav-icon fas fa-history"></i>
-                            <span>Audit Trail</span>
-                        </a>
-                    </li>
+                    <!-- Audit Trail module not yet available -->
 
                 </ul>
             </nav>
@@ -891,20 +869,27 @@ function toggleSidebar() {
 // Sidebar menu dropdown functionality
 document.addEventListener('DOMContentLoaded', function() {
     // Handle sidebar menu dropdowns
-    document.querySelectorAll('.nav-sidebar .nav-link.has-dropdown').forEach(function(element) {
+    var dropdownLinks = document.querySelectorAll('.nav-sidebar .nav-link.has-dropdown');
+    
+    dropdownLinks.forEach(function(element) {
         element.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
             
-            var parent = this.parentElement;
+            var parent = this.closest('.nav-item');
+            if (!parent) return;
+            
             var wasOpen = parent.classList.contains('menu-open');
             
             // Close all other open menus at the same level
-            var siblings = parent.parentElement.children;
-            for (var i = 0; i < siblings.length; i++) {
-                if (siblings[i] !== parent && siblings[i].classList.contains('nav-item')) {
-                    siblings[i].classList.remove('menu-open');
-                }
+            var container = parent.parentElement;
+            if (container) {
+                var siblings = container.querySelectorAll('.nav-item.menu-open');
+                siblings.forEach(function(sibling) {
+                    if (sibling !== parent) {
+                        sibling.classList.remove('menu-open');
+                    }
+                });
             }
             
             // Toggle current menu

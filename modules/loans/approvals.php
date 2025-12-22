@@ -32,7 +32,7 @@ $department_filter = $_GET['department'] ?? '';
 $loan_type_filter = $_GET['loan_type'] ?? '';
 
 // Build query
-$sql = "SELECT el.*, lt.loan_type_name, e.first_name, e.last_name, e.employee_number,
+$sql = "SELECT el.*, lt.type_name as loan_type_name, e.first_name, e.last_name, e.employee_number,
                e.basic_salary, d.department_name,
                (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = el.approved_by) as approver_name
         FROM employee_loans el
@@ -62,7 +62,7 @@ $loans = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get departments and loan types for filters
 $departments = $conn->query("SELECT department_id, department_name FROM departments WHERE company_id = $company_id ORDER BY department_name")->fetchAll(PDO::FETCH_ASSOC);
-$loan_types = $conn->query("SELECT loan_type_id, loan_type_name FROM loan_types WHERE company_id = $company_id ORDER BY loan_type_name")->fetchAll(PDO::FETCH_ASSOC);
+$loan_types = $conn->query("SELECT loan_type_id, type_name as loan_type_name FROM loan_types WHERE company_id = $company_id ORDER BY type_name")->fetchAll(PDO::FETCH_ASSOC);
 
 // Count by status
 $counts = [];

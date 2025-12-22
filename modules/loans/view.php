@@ -27,7 +27,7 @@ if (!$loan_id) {
 }
 
 // Get loan details with employee info
-$sql = "SELECT el.*, lt.loan_type_name, lt.interest_rate as type_rate, lt.requires_guarantor,
+$sql = "SELECT el.*, lt.type_name as loan_type_name, lt.interest_rate as type_rate, lt.requires_guarantor,
                e.first_name, e.last_name, e.employee_number, e.basic_salary, e.email as emp_email,
                d.department_name, p.position_name,
                (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = el.approved_by) as approver_name,

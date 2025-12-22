@@ -30,9 +30,11 @@ $status_filter = $_GET['status'] ?? 'pending';
 
 // Get transactions
 $sql = "SELECT pct.*, pca.account_name, pca.current_balance,
-               CONCAT(e.first_name, ' ', e.last_name) as requester_name, e.employee_number,
+               CONCAT(e.first_name, ' ', IFNULL(CONCAT(e.middle_name, ' '), ''), e.last_name) as requester_name, 
+               e.employee_number,
                d.department_name,
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.user_id = pct.approved_by) as approver_name
+               (SELECT CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) 
+                FROM users u WHERE u.user_id = pct.approved_by) as approver_name
         FROM petty_cash_transactions pct
         JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
         JOIN employees e ON pct.created_by = e.employee_id

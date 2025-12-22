@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Check for duplicate name
         $check_sql = "SELECT COUNT(*) as count FROM loan_types 
-                      WHERE company_id = ? AND loan_type_name = ? AND loan_type_id != ?";
+                      WHERE company_id = ? AND type_name = ? AND loan_type_id != ?";
         $stmt = $conn->prepare($check_sql);
         $stmt->execute([$company_id, $loan_type_name, $loan_type_id]);
         if ($stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {
@@ -73,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             try {
                 if ($action === 'add') {
-                    $sql = "INSERT INTO loan_types (company_id, loan_type_name, loan_code, interest_rate, 
-                                min_amount, max_amount, max_term_months, requires_guarantor, is_active)
+                    $sql = "INSERT INTO loan_types (company_id, type_name, type_code, interest_rate, 
+                                min_amount, max_amount, max_repayment_months, requires_guarantor, is_active)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     $stmt = $conn->prepare($sql);
                     $stmt->execute([$company_id, $loan_type_name, $loan_code, $interest_rate, 
@@ -82,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = "Loan type added successfully.";
                 } else {
                     $sql = "UPDATE loan_types 
-                            SET loan_type_name = ?, loan_code = ?, interest_rate = ?, 
-                                min_amount = ?, max_amount = ?, max_term_months = ?, 
+                            SET type_name = ?, type_code = ?, interest_rate = ?, 
+                                min_amount = ?, max_amount = ?, max_repayment_months = ?, 
                                 requires_guarantor = ?, is_active = ?
                             WHERE loan_type_id = ? AND company_id = ?";
                     $stmt = $conn->prepare($sql);
@@ -125,11 +125,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch loan types
 $sql = "SELECT lt.*, 
+               lt.type_name as loan_type_name,
                (SELECT COUNT(*) FROM employee_loans el WHERE el.loan_type_id = lt.loan_type_id) as usage_count,
                (SELECT SUM(loan_amount) FROM employee_loans el WHERE el.loan_type_id = lt.loan_type_id AND el.status IN ('DISBURSED', 'ACTIVE')) as total_disbursed
         FROM loan_types lt
         WHERE lt.company_id = ?
-        ORDER BY lt.loan_type_name";
+        ORDER BY lt.type_name";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
 $loan_types = $stmt->fetchAll(PDO::FETCH_ASSOC);
