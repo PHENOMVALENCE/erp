@@ -5,15 +5,16 @@
  */
 
 define('APP_ACCESS', true);
+session_start();
 require_once '../../config/database.php';
+require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
-    exit;
-}
+$auth = new Auth();
+$auth->requireLogin();
 
 $db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
@@ -23,8 +24,8 @@ $employee = getEmployeeByUserId($conn, $user_id, $company_id);
 
 // Get petty cash accounts
 $sql = "SELECT pc.*, 
-               (SELECT SUM(amount) FROM petty_cash_transactions WHERE account_id = pc.account_id AND transaction_type = 'REPLENISHMENT') as total_replenished,
-               (SELECT SUM(amount) FROM petty_cash_transactions WHERE account_id = pc.account_id AND transaction_type = 'DISBURSEMENT' AND status = 'APPROVED') as total_disbursed
+               (SELECT SUM(amount) FROM petty_cash_transactions WHERE petty_cash_id = pc.petty_cash_id AND transaction_type = 'replenishment') as total_replenished,
+               (SELECT SUM(amount) FROM petty_cash_transactions WHERE petty_cash_id = pc.petty_cash_id AND transaction_type = 'disbursement' AND status = 'completed') as total_disbursed
         FROM petty_cash_accounts pc
         WHERE pc.company_id = ? AND pc.is_active = 1
         ORDER BY pc.account_name";
@@ -38,9 +39,9 @@ if ($is_finance) {
     $sql = "SELECT pct.*, pca.account_name, 
                    CONCAT(e.first_name, ' ', e.last_name) as requester_name
             FROM petty_cash_transactions pct
-            JOIN petty_cash_accounts pca ON pct.account_id = pca.account_id
-            JOIN employees e ON pct.requested_by = e.employee_id
-            WHERE pca.company_id = ? AND pct.status = 'PENDING' AND pct.transaction_type = 'DISBURSEMENT'
+            JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
+            JOIN employees e ON pct.created_by = e.employee_id
+            WHERE pca.company_id = ? AND pct.status = 'pending' AND pct.transaction_type = 'disbursement'
             ORDER BY pct.created_at ASC";
     $stmt = $conn->prepare($sql);
     $stmt->execute([$company_id]);
@@ -52,11 +53,11 @@ $my_requests = [];
 if ($employee) {
     $sql = "SELECT pct.*, pca.account_name
             FROM petty_cash_transactions pct
-            JOIN petty_cash_accounts pca ON pct.account_id = pca.account_id
-            WHERE pct.requested_by = ?
+            JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
+            WHERE pct.created_by = ?
             ORDER BY pct.created_at DESC LIMIT 10";
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$employee['employee_id']]);
+    $stmt->execute([$user_id]);
     $my_requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -64,9 +65,9 @@ if ($employee) {
 $sql = "SELECT pct.*, pca.account_name, 
                CONCAT(e.first_name, ' ', e.last_name) as requester_name
         FROM petty_cash_transactions pct
-        JOIN petty_cash_accounts pca ON pct.account_id = pca.account_id
-        LEFT JOIN employees e ON pct.requested_by = e.employee_id
-        WHERE pca.company_id = ? AND pct.status = 'APPROVED'
+        JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
+        LEFT JOIN employees e ON pct.created_by = e.employee_id
+        WHERE pca.company_id = ? AND pct.status = 'completed'
         ORDER BY pct.transaction_date DESC LIMIT 10";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
@@ -74,7 +75,7 @@ $recent_transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Calculate totals
 $total_balance = array_sum(array_column($accounts, 'current_balance'));
-$total_limit = array_sum(array_column($accounts, 'maximum_balance'));
+$total_limit = array_sum(array_column($accounts, 'maximum_limit'));
 
 $page_title = "Petty Cash Management";
 require_once '../../includes/header.php';
@@ -315,7 +316,7 @@ require_once '../../includes/header.php';
                         </div>
                         <?php if ($is_low && $is_finance): ?>
                         <div class="mt-3">
-                            <a href="replenish.php?account=<?php echo $acc['account_id']; ?>" class="btn btn-sm btn-warning">
+                            <a href="replenish.php?account=<?php echo $acc['petty_cash_id']; ?>" class="btn btn-sm btn-warning">
                                 <i class="fas fa-plus me-1"></i>Replenish
                             </a>
                         </div>

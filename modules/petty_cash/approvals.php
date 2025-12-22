@@ -5,15 +5,16 @@
  */
 
 define('APP_ACCESS', true);
+session_start();
 require_once '../../config/database.php';
+require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
-    exit;
-}
+$auth = new Auth();
+$auth->requireLogin();
 
 $db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
@@ -25,18 +26,18 @@ if (!hasPermission($conn, $user_id, ['FINANCE_OFFICER', 'COMPANY_ADMIN', 'SUPER_
     exit;
 }
 
-$status_filter = $_GET['status'] ?? 'PENDING';
+$status_filter = $_GET['status'] ?? 'pending';
 
 // Get transactions
 $sql = "SELECT pct.*, pca.account_name, pca.current_balance,
                CONCAT(e.first_name, ' ', e.last_name) as requester_name, e.employee_number,
                d.department_name,
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = pct.approved_by) as approver_name
+               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.user_id = pct.approved_by) as approver_name
         FROM petty_cash_transactions pct
-        JOIN petty_cash_accounts pca ON pct.account_id = pca.account_id
-        JOIN employees e ON pct.requested_by = e.employee_id
+        JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
+        JOIN employees e ON pct.created_by = e.employee_id
         LEFT JOIN departments d ON e.department_id = d.department_id
-        WHERE pca.company_id = ? AND pct.transaction_type = 'DISBURSEMENT'";
+        WHERE pca.company_id = ? AND pct.transaction_type = 'disbursement'";
 $params = [$company_id];
 
 if ($status_filter !== 'ALL') {
@@ -53,8 +54,8 @@ $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $counts = [];
 $count_sql = "SELECT status, COUNT(*) as count 
               FROM petty_cash_transactions pct
-              JOIN petty_cash_accounts pca ON pct.account_id = pca.account_id
-              WHERE pca.company_id = ? AND pct.transaction_type = 'DISBURSEMENT'
+              JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
+              WHERE pca.company_id = ? AND pct.transaction_type = 'disbursement'
               GROUP BY status";
 $stmt = $conn->prepare($count_sql);
 $stmt->execute([$company_id]);
@@ -142,14 +143,14 @@ require_once '../../includes/header.php';
 
             <!-- Status Tabs -->
             <div class="status-tabs">
-                <a href="?status=PENDING" class="status-tab <?php echo $status_filter === 'PENDING' ? 'active' : ''; ?>">
-                    Pending <span class="badge bg-warning ms-1"><?php echo $counts['PENDING'] ?? 0; ?></span>
+                <a href="?status=pending" class="status-tab <?php echo $status_filter === 'pending' ? 'active' : ''; ?>">
+                    Pending <span class="badge bg-warning ms-1"><?php echo $counts['pending'] ?? 0; ?></span>
                 </a>
-                <a href="?status=APPROVED" class="status-tab <?php echo $status_filter === 'APPROVED' ? 'active' : ''; ?>">
-                    Approved <span class="badge bg-success ms-1"><?php echo $counts['APPROVED'] ?? 0; ?></span>
+                <a href="?status=approved" class="status-tab <?php echo $status_filter === 'approved' ? 'active' : ''; ?>">
+                    Approved <span class="badge bg-success ms-1"><?php echo $counts['approved'] ?? 0; ?></span>
                 </a>
-                <a href="?status=REJECTED" class="status-tab <?php echo $status_filter === 'REJECTED' ? 'active' : ''; ?>">
-                    Rejected <span class="badge bg-danger ms-1"><?php echo $counts['REJECTED'] ?? 0; ?></span>
+                <a href="?status=rejected" class="status-tab <?php echo $status_filter === 'rejected' ? 'active' : ''; ?>">
+                    Rejected <span class="badge bg-danger ms-1"><?php echo $counts['rejected'] ?? 0; ?></span>
                 </a>
                 <a href="?status=ALL" class="status-tab <?php echo $status_filter === 'ALL' ? 'active' : ''; ?>">
                     All <span class="badge bg-secondary ms-1"><?php echo array_sum($counts); ?></span>
@@ -174,7 +175,7 @@ require_once '../../includes/header.php';
                                 <?php echo htmlspecialchars($txn['department_name'] ?? 'N/A'); ?>
                             </small>
                             <br>
-                            <code><?php echo htmlspecialchars($txn['transaction_reference']); ?></code>
+                            <code><?php echo htmlspecialchars($txn['transaction_number']); ?></code>
                         </div>
                         <div class="col-md-3">
                             <strong><?php echo htmlspecialchars($txn['description']); ?></strong>
@@ -192,11 +193,11 @@ require_once '../../includes/header.php';
                         <div class="col-md-3 text-end">
                             <?php echo getStatusBadge($txn['status']); ?>
                             
-                            <?php if ($txn['status'] === 'PENDING'): ?>
+                            <?php if ($txn['status'] === 'pending'): ?>
                             <div class="mt-2">
                                 <button type="button" class="btn btn-sm btn-success approve-btn"
                                         data-id="<?php echo $txn['transaction_id']; ?>"
-                                        data-ref="<?php echo htmlspecialchars($txn['transaction_reference']); ?>"
+                                        data-ref="<?php echo htmlspecialchars($txn['transaction_number']); ?>"
                                         data-name="<?php echo htmlspecialchars($txn['requester_name']); ?>"
                                         data-amount="<?php echo formatCurrency($txn['amount']); ?>"
                                         data-balance="<?php echo $txn['current_balance']; ?>">
@@ -204,7 +205,7 @@ require_once '../../includes/header.php';
                                 </button>
                                 <button type="button" class="btn btn-sm btn-danger reject-btn"
                                         data-id="<?php echo $txn['transaction_id']; ?>"
-                                        data-ref="<?php echo htmlspecialchars($txn['transaction_reference']); ?>">
+                                        data-ref="<?php echo htmlspecialchars($txn['transaction_number']); ?>">
                                     <i class="fas fa-times"></i> Reject
                                 </button>
                             </div>
@@ -214,7 +215,7 @@ require_once '../../includes/header.php';
                         </div>
                     </div>
                     
-                    <?php if ($txn['status'] === 'REJECTED' && $txn['rejection_reason']): ?>
+                    <?php if ($txn['status'] === 'rejected' && $txn['rejection_reason']): ?>
                     <div class="alert alert-danger mt-3 mb-0 py-2">
                         <small><strong>Reason:</strong> <?php echo htmlspecialchars($txn['rejection_reason']); ?></small>
                     </div>

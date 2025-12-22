@@ -5,15 +5,16 @@
  */
 
 define('APP_ACCESS', true);
+session_start();
 require_once '../../config/database.php';
+require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
-    exit;
-}
+$auth = new Auth();
+$auth->requireLogin();
 
 $db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
@@ -45,14 +46,14 @@ $expense_categories = [
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $account_id = (int)$_POST['account_id'];
+    $petty_cash_id = (int)$_POST['petty_cash_id'];
     $amount = (float)$_POST['amount'];
     $description = sanitize($_POST['description']);
     $category = sanitize($_POST['category']);
     $receipt_number = sanitize($_POST['receipt_number']);
     
     // Validation
-    if (!$account_id) {
+    if (!$petty_cash_id) {
         $errors[] = "Please select a petty cash account.";
     }
     if ($amount <= 0) {
@@ -63,9 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     // Check account balance
-    $sql = "SELECT * FROM petty_cash_accounts WHERE account_id = ? AND company_id = ?";
+    $sql = "SELECT * FROM petty_cash_accounts WHERE petty_cash_id = ? AND company_id = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$account_id, $company_id]);
+    $stmt->execute([$petty_cash_id, $company_id]);
     $account = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$account) {
@@ -78,14 +79,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         try {
-            $reference = generateReference($conn, 'PC', 'petty_cash_transactions', 'transaction_reference', $company_id);
+            $reference = generateReference('PC', $conn, $company_id, 'petty_cash_transactions', 'transaction_number');
+            
+            $balance_before = $account['current_balance'];
+            $balance_after = $balance_before - $amount;
             
             $sql = "INSERT INTO petty_cash_transactions (
-                        account_id, transaction_reference, transaction_type, transaction_date,
-                        amount, description, category, receipt_number, requested_by, status, created_at
-                    ) VALUES (?, ?, 'DISBURSEMENT', CURDATE(), ?, ?, ?, ?, ?, 'PENDING', NOW())";
+                        petty_cash_id, transaction_number, transaction_type, transaction_date,
+                        amount, description, category_id, receipt_number, status, balance_before, balance_after, created_by
+                    ) VALUES (?, ?, 'disbursement', CURDATE(), ?, ?, NULL, ?, 'pending', ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$account_id, $reference, $amount, $description, $category, $receipt_number, $employee['employee_id']]);
+            $stmt->execute([$petty_cash_id, $reference, $amount, $description, $receipt_number, $balance_before, $balance_after, $user_id]);
             
             logAudit($conn, $company_id, $user_id, 'create', 'petty_cash', 'petty_cash_transactions', 
                      $conn->lastInsertId(), null, ['reference' => $reference, 'amount' => $amount]);
@@ -190,14 +194,14 @@ require_once '../../includes/header.php';
                                 ?>
                                 <div class="col-md-6">
                                     <label class="account-option d-block">
-                                        <input type="radio" name="account_id" value="<?php echo $acc['account_id']; ?>" 
+                                        <input type="radio" name="petty_cash_id" value="<?php echo $acc['petty_cash_id']; ?>" 
                                                data-balance="<?php echo $acc['current_balance']; ?>"
-                                               data-limit="<?php echo $acc['single_transaction_limit']; ?>" required>
+                                               data-limit="<?php echo $acc['transaction_limit']; ?>" required>
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
                                                 <strong><?php echo htmlspecialchars($acc['account_name']); ?></strong>
                                                 <small class="d-block text-muted">
-                                                    Limit: <?php echo formatCurrency($acc['single_transaction_limit']); ?> per transaction
+                                                    Limit: <?php echo formatCurrency($acc['transaction_limit']); ?> per transaction
                                                 </small>
                                             </div>
                                             <span class="account-balance <?php echo $balance_percent < 20 ? 'low' : ''; ?>">

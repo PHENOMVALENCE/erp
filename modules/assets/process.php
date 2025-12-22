@@ -5,18 +5,24 @@
  */
 
 define('APP_ACCESS', true);
+session_start();
 require_once '../../config/database.php';
+require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
-    exit;
-}
+$auth = new Auth();
+$auth->requireLogin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
     exit;
 }
+
+$db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
+$conn = $db->getConnection();
+$company_id = $_SESSION['company_id'];
+$user_id = $_SESSION['user_id'];
 
 $db = Database::getInstance();
 $conn = $db->getConnection();

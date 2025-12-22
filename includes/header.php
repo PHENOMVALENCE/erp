@@ -211,7 +211,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             to { opacity: 1; transform: translateY(0); }
         }
         
-        .nav-link[data-toggle="dropdown"]::after { 
+        .nav-link.has-dropdown::after { 
             margin-left: auto; 
             content: "\f105"; 
             font-family: "Font Awesome 6 Free"; 
@@ -220,7 +220,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             font-size: 12px;
         }
         
-        .nav-item.menu-open > .nav-link[data-toggle="dropdown"]::after { 
+        .nav-item.menu-open > .nav-link.has-dropdown::after { 
             transform: rotate(90deg); 
         }
         
@@ -354,7 +354,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
     <nav class="main-header navbar navbar-expand">
         <ul class="navbar-nav">
             <li class="nav-item d-lg-none">
-                <a class="nav-link" href="#" onclick="document.getElementById('mainSidebar').classList.toggle('sidebar-open')">
+                <a class="nav-link" href="#" onclick="toggleSidebar(); return false;">
                     <i class="fas fa-bars"></i>
                 </a>
             </li>
@@ -376,14 +376,14 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                     <a href="<?php echo $base_path; ?>modules/sales/create.php" class="dropdown-item">
                         <i class="fas fa-plus-circle me-2 text-success"></i> New Reservation
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="dropdown-item">
-                        <i class="fas fa-receipt me-2 text-danger"></i> Submit Expense
+                    <a href="<?php echo $base_path; ?>modules/leave/apply.php" class="dropdown-item">
+                        <i class="fas fa-calendar-plus me-2 text-info"></i> Apply Leave
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/payments/record.php" class="dropdown-item">
-                        <i class="fas fa-money-bill-wave me-2 text-info"></i> Record Payment
+                    <a href="<?php echo $base_path; ?>modules/loans/apply.php" class="dropdown-item">
+                        <i class="fas fa-hand-holding-usd me-2 text-warning"></i> Apply Loan
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/petty_cash/disbursement.php" class="dropdown-item">
-                        <i class="fas fa-cash-register me-2 text-warning"></i> Petty Cash Out
+                    <a href="<?php echo $base_path; ?>modules/petty_cash/request.php" class="dropdown-item">
+                        <i class="fas fa-wallet me-2 text-danger"></i> Petty Cash Request
                     </a>
                 </div>
             </li>
@@ -492,8 +492,9 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
     <!-- Enhanced Sidebar -->
     <aside class="main-sidebar" id="mainSidebar">
-        <!-- Sidebar Logo Section -->
-        
+        <div class="sidebar">
+            <nav class="mt-2">
+                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
 
                     <!-- Dashboard -->
                     <li class="nav-item">
@@ -508,7 +509,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Projects & Plots -->
                     <li class="nav-item <?php echo in_array($current_module, ['plots','projects']) ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-map-marked-alt"></i>
                             <span>Projects & Plots</span>
                         </a>
@@ -523,7 +524,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Marketing & Leads -->
                     <li class="nav-item <?php echo ($current_module == 'marketing') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-bullhorn"></i>
                             <span>Marketing & Leads</span>
                         </a>
@@ -537,7 +538,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Customers -->
                     <li class="nav-item <?php echo ($current_module == 'customers') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-users"></i>
                             <span>Customers</span>
                         </a>
@@ -550,7 +551,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Sales & Reservations -->
                     <li class="nav-item <?php echo ($current_module == 'sales') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-file-contract"></i>
                             <span>Sales & Reservations</span>
                         </a>
@@ -564,7 +565,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Land Services -->
                     <li class="nav-item <?php echo ($current_module == 'services') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-tools"></i>
                             <span>Land Services</span>
                         </a>
@@ -580,7 +581,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Payments -->
                     <li class="nav-item <?php echo ($current_module == 'payments') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-money-bill-wave"></i>
                             <span>Payments</span>
                             <span class="badge bg-success">5</span>
@@ -596,68 +597,34 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Expenses -->
                     <li class="nav-item <?php echo ($current_module == 'expenses') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-receipt"></i>
                             <span>Expenses</span>
-                            <span class="badge bg-danger">8</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/claims.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Claims</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Submit Claim</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/direct.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Direct Expenses</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Expenses</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Submit Expense</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Categories</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Petty Cash -->
+                    <!-- Petty Cash (NEW) -->
                     <li class="nav-item <?php echo ($current_module == 'petty_cash') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
-                            <i class="nav-icon fas fa-cash-register"></i>
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-wallet"></i>
                             <span>Petty Cash</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Petty Cash Accounts</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/transactions.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Transactions</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/disbursement.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>New Disbursement</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/replenishment.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Request Replenishment</span></a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Assets -->
-                    <li class="nav-item <?php echo ($current_module == 'assets') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
-                            <i class="nav-icon fas fa-laptop"></i>
-                            <span>Fixed Assets</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/register.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Categories</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/maintenance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Maintenance</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/disposal.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Disposal</span></a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Loans -->
-                    <li class="nav-item <?php echo ($current_module == 'loans') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
-                            <i class="nav-icon fas fa-hand-holding-usd"></i>
-                            <span>Loans</span>
-                            <span class="badge bg-warning">4</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/employee_loans.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Employee Loans</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/repayments.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Repayment Schedule</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/company_loans.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Company Loans</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Types</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/request.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Request Cash</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Accounts</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Commissions -->
                     <li class="nav-item <?php echo ($current_module == 'commissions') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-percent"></i>
                             <span>Commissions</span>
                         </a>
@@ -670,7 +637,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Accounting -->
                     <li class="nav-item <?php echo ($current_module == 'accounting') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-book"></i>
                             <span>Accounting</span>
                         </a>
@@ -685,7 +652,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Finance & Banking -->
                     <li class="nav-item <?php echo in_array($current_module, ['finance','bank']) ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-university"></i>
                             <span>Finance & Banking</span>
                         </a>
@@ -699,7 +666,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Tax Management -->
                     <li class="nav-item <?php echo ($current_module == 'tax') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-file-invoice-dollar"></i>
                             <span>Tax Management</span>
                         </a>
@@ -715,7 +682,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Procurement -->
                     <li class="nav-item <?php echo ($current_module == 'procurement') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-shopping-cart"></i>
                             <span>Procurement</span>
                         </a>
@@ -729,8 +696,8 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Inventory -->
                     <li class="nav-item <?php echo ($current_module == 'inventory') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
-                            <i class="nav-icon fas fa-warehouse"></i>
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-boxes"></i>
                             <span>Inventory</span>
                         </a>
                         <ul class="nav nav-treeview">
@@ -741,18 +708,78 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         </ul>
                     </li>
 
-                    <!-- Human Resources -->
+                    <!-- Assets (NEW) -->
+                    <li class="nav-item <?php echo ($current_module == 'assets') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-warehouse"></i>
+                            <span>Assets</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Categories</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- HR SECTION -->
+                    <li class="nav-header">HUMAN RESOURCES</li>
+
+                    <!-- HR -->
                     <li class="nav-item <?php echo ($current_module == 'hr') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-user-tie"></i>
                             <span>Human Resources</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/employees.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Employees</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/attendance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Attendance</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/leave.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Management</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/payroll.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/recruitment.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Recruitment</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Leave Management (NEW) -->
+                    <li class="nav-item <?php echo ($current_module == 'leave') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-calendar-alt"></i>
+                            <span>Leave Management</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Leave</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/my-leaves.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Leaves</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/leave-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Types</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Loans (NEW) -->
+                    <li class="nav-item <?php echo ($current_module == 'loans') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-hand-holding-usd"></i>
+                            <span>Loans</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/my-loans.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Loans</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/loan-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Products</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Payroll (NEW) -->
+                    <li class="nav-item <?php echo ($current_module == 'payroll') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link has-dropdown">
+                            <i class="nav-icon fas fa-money-check-alt"></i>
+                            <span>Payroll</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/generate.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Run Payroll</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payslips.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payslips</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/history.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>History</span></a></li>
                         </ul>
                     </li>
 
@@ -761,7 +788,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Approvals -->
                     <li class="nav-item <?php echo ($current_module == 'approvals') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-check-double"></i>
                             <span>Approvals</span>
                             <span class="badge bg-warning">15</span>
@@ -775,7 +802,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Documents -->
                     <li class="nav-item <?php echo ($current_module == 'documents') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-folder-open"></i>
                             <span>Documents</span>
                         </a>
@@ -789,25 +816,24 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                     <!-- ANALYTICS SECTION -->
                     <li class="nav-header">ANALYTICS</li>
 
-                    <!-- Reports -->
+                    <!-- Reports (UPDATED) -->
                     <li class="nav-item <?php echo ($current_module == 'reports') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-chart-bar"></i>
                             <span>Reports</span>
                         </a>
                         <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Reports Hub</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/sales.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Sales Reports</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/financial.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Financial Reports</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/payroll-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll Summary</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/customers.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Customer Reports</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/hr.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>HR Reports</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/inventory.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Inventory Reports</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/custom.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Custom Reports</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Analytics Dashboard -->
                     <li class="nav-item <?php echo ($current_module == 'analytics') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-chart-line"></i>
                             <span>Analytics</span>
                         </a>
@@ -823,7 +849,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
 
                     <!-- Settings -->
                     <li class="nav-item <?php echo ($current_module == 'settings') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link" data-toggle="dropdown">
+                        <a href="#" class="nav-link has-dropdown">
                             <i class="nav-icon fas fa-cog"></i>
                             <span>Settings</span>
                         </a>
@@ -853,3 +879,46 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
     <!-- Content Wrapper -->
     <div class="content-wrapper">
         <!-- Your page content goes here -->
+
+<!-- Scripts at bottom -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Sidebar toggle functionality for mobile
+function toggleSidebar() {
+    document.getElementById('mainSidebar').classList.toggle('sidebar-open');
+}
+
+// Sidebar menu dropdown functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle sidebar menu dropdowns
+    document.querySelectorAll('.nav-sidebar .nav-link.has-dropdown').forEach(function(element) {
+        element.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            var parent = this.parentElement;
+            var wasOpen = parent.classList.contains('menu-open');
+            
+            // Close all other open menus at the same level
+            var siblings = parent.parentElement.children;
+            for (var i = 0; i < siblings.length; i++) {
+                if (siblings[i] !== parent && siblings[i].classList.contains('nav-item')) {
+                    siblings[i].classList.remove('menu-open');
+                }
+            }
+            
+            // Toggle current menu
+            if (wasOpen) {
+                parent.classList.remove('menu-open');
+            } else {
+                parent.classList.add('menu-open');
+            }
+        });
+    });
+    
+    // Keep current module menu open
+    document.querySelectorAll('.nav-item.menu-open').forEach(function(item) {
+        // Already has menu-open class from PHP, ensure it stays
+    });
+});
+</script>
