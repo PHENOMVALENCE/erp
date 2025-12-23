@@ -28,13 +28,14 @@ if (!$loan_id) {
 
 // Get loan details with employee info
 $sql = "SELECT el.*, lt.type_name as loan_type_name, lt.interest_rate as type_rate, lt.requires_guarantor,
-               e.first_name, e.last_name, e.employee_number, e.basic_salary, e.email as emp_email,
-               d.department_name, p.position_name,
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = el.approved_by) as approver_name,
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = el.disbursed_by) as disburser_name
+               u.full_name, u.email as emp_email, e.employee_number, e.basic_salary,
+               d.department_name, p.position_title,
+               (SELECT u2.full_name FROM users u2 WHERE u2.user_id = el.approved_by) as approver_name,
+               (SELECT u3.full_name FROM users u3 WHERE u3.user_id = el.disbursed_by) as disburser_name
         FROM employee_loans el
         JOIN loan_types lt ON el.loan_type_id = lt.loan_type_id
         JOIN employees e ON el.employee_id = e.employee_id
+        JOIN users u ON e.user_id = u.user_id
         LEFT JOIN departments d ON e.department_id = d.department_id
         LEFT JOIN positions p ON e.position_id = p.position_id
         WHERE el.loan_id = ? AND el.company_id = ?";
@@ -67,7 +68,7 @@ $schedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get payment history
 $sql = "SELECT lp.*, 
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = lp.recorded_by) as recorder_name
+               (SELECT u.full_name FROM users u WHERE u.user_id = lp.created_by) as recorder_name
         FROM loan_payments lp 
         WHERE lp.loan_id = ? 
         ORDER BY lp.payment_date DESC";
@@ -75,20 +76,24 @@ $stmt = $conn->prepare($sql);
 $stmt->execute([$loan_id]);
 $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get guarantors
-$sql = "SELECT lg.*, e.first_name, e.last_name, e.employee_number
-        FROM loan_guarantors lg
-        JOIN employees e ON lg.guarantor_employee_id = e.employee_id
-        WHERE lg.loan_id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->execute([$loan_id]);
-$guarantors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Get guarantors - Note: loan_guarantors table may not exist, check if needed
+$guarantors = [];
+// Commented out as table may not exist in schema
+// $sql = "SELECT lg.*, u.full_name, e.employee_number
+//         FROM loan_guarantors lg
+//         JOIN employees e ON lg.guarantor_employee_id = e.employee_id
+//         JOIN users u ON e.user_id = u.user_id
+//         WHERE lg.loan_id = ?";
+// $stmt = $conn->prepare($sql);
+// $stmt->execute([$loan_id]);
+// $guarantors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Calculate summary
-$total_paid = array_sum(array_column($payments, 'amount_paid'));
-$paid_percent = $loan['total_repayable'] > 0 ? ($total_paid / $loan['total_repayable']) * 100 : 0;
+$total_paid = array_sum(array_column($payments, 'total_paid'));
+$total_repayable = $loan['loan_amount'] + $loan['interest_outstanding'];
+$paid_percent = $total_repayable > 0 ? ($total_paid / $total_repayable) * 100 : 0;
 
-$page_title = "Loan Details - " . $loan['loan_reference'];
+$page_title = "Loan Details - " . $loan['loan_number'];
 require_once '../../includes/header.php';
 ?>
 
@@ -185,7 +190,7 @@ require_once '../../includes/header.php';
             <div class="detail-header">
                 <div class="row align-items-center">
                     <div class="col-md-8">
-                        <span class="loan-ref">Reference: <?php echo htmlspecialchars($loan['loan_reference']); ?></span>
+                        <span class="loan-ref">Reference: <?php echo htmlspecialchars($loan['loan_number']); ?></span>
                         <div class="loan-amount-big"><?php echo formatCurrency($loan['loan_amount']); ?></div>
                         <span><?php echo htmlspecialchars($loan['loan_type_name']); ?></span>
                     </div>
@@ -212,7 +217,7 @@ require_once '../../includes/header.php';
                                 <small class="text-muted">Principal</small>
                             </div>
                             <div class="col-md-3 text-center">
-                                <h4 class="text-warning mb-0"><?php echo formatCurrency($loan['total_repayable'] - $loan['loan_amount']); ?></h4>
+                                <h4 class="text-warning mb-0"><?php echo formatCurrency($loan['interest_outstanding']); ?></h4>
                                 <small class="text-muted">Interest</small>
                             </div>
                             <div class="col-md-3 text-center">
@@ -326,15 +331,15 @@ require_once '../../includes/header.php';
                             </div>
                             <div class="info-item">
                                 <div class="info-label">Term</div>
-                                <div class="info-value"><?php echo $loan['loan_term_months']; ?> months</div>
+                                <div class="info-value"><?php echo $loan['repayment_period_months']; ?> months</div>
                             </div>
                             <div class="info-item">
                                 <div class="info-label">Monthly Payment</div>
-                                <div class="info-value"><?php echo formatCurrency($loan['monthly_installment']); ?></div>
+                                <div class="info-value"><?php echo formatCurrency($loan['monthly_deduction']); ?></div>
                             </div>
                             <div class="info-item">
                                 <div class="info-label">Total Repayable</div>
-                                <div class="info-value"><?php echo formatCurrency($loan['total_repayable']); ?></div>
+                                <div class="info-value"><?php echo formatCurrency($loan['loan_amount'] + $loan['interest_outstanding']); ?></div>
                             </div>
                         </div>
                     </div>
@@ -461,12 +466,12 @@ require_once '../../includes/header.php';
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <strong>Outstanding:</strong> <?php echo formatCurrency($loan['total_outstanding']); ?><br>
-                        <strong>Monthly Installment:</strong> <?php echo formatCurrency($loan['monthly_installment']); ?>
+                        <strong>Monthly Installment:</strong> <?php echo formatCurrency($loan['monthly_deduction']); ?>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Payment Amount <span class="text-danger">*</span></label>
                         <input type="number" name="payment_amount" class="form-control" 
-                               value="<?php echo $loan['monthly_installment']; ?>" 
+                               value="<?php echo $loan['monthly_deduction']; ?>" 
                                max="<?php echo $loan['total_outstanding']; ?>" step="0.01" required>
                     </div>
                     <div class="mb-3">

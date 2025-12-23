@@ -3,8 +3,7 @@
     </div>
     <!-- ./wrapper -->
 
-    <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Page-level scripts only; Bootstrap bundle is loaded in header.php -->
     
     <!-- AdminLTE App -->
     <script>
@@ -26,28 +25,7 @@
             }
         });
 
-        // Dropdown menu toggle
-        document.querySelectorAll('.nav-link[data-toggle="dropdown"]').forEach(function(element) {
-            element.addEventListener('click', function(e) {
-                e.preventDefault();
-                const navItem = this.closest('.nav-item');
-                const isOpen = navItem.classList.contains('menu-open');
-                
-                // Close all other dropdowns
-                document.querySelectorAll('.nav-item.menu-open').forEach(function(item) {
-                    if (item !== navItem) {
-                        item.classList.remove('menu-open');
-                    }
-                });
-                
-                // Toggle current dropdown
-                if (isOpen) {
-                    navItem.classList.remove('menu-open');
-                } else {
-                    navItem.classList.add('menu-open');
-                }
-            });
-        });
+        // Note: Dropdowns are initialized in header.php for consistency
 
         // Auto-open active menu item
         document.addEventListener('DOMContentLoaded', function() {

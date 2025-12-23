@@ -1,19 +1,21 @@
 <?php
+define('APP_ACCESS', true);
 session_start();
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-defined('APP_ACCESS') or die('Direct access not permitted');
+$auth = new Auth();
+$auth->requireLogin();
 
-// Require authentication
-Auth::requireLogin();
-
-$page_title = "Payroll Processing";
-include '../../includes/header.php';
-
+$db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
+$conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
+
+$page_title = "Payroll Processing";
+require_once '../../includes/header.php';
 
 // Get current month and year
 $current_month = isset($_GET['month']) ? intval($_GET['month']) : date('n');
@@ -26,34 +28,31 @@ $payroll_query = "SELECT p.*, COUNT(pd.payroll_detail_id) as employee_count
                   WHERE p.company_id = ? AND p.payroll_month = ? AND p.payroll_year = ?
                   GROUP BY p.payroll_id";
 
-$payroll_stmt = $conn->prepare($payroll_query);
-$payroll_stmt->bind_param('iii', $company_id, $current_month, $current_year);
-$payroll_stmt->execute();
-$payroll_result = $payroll_stmt->get_result();
-$payroll = $payroll_result->fetch_assoc();
+$stmt = $conn->prepare($payroll_query);
+$stmt->execute([$company_id, $current_month, $current_year]);
+$payroll = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Get active employees
-$emp_query = "SELECT e.*, d.department_name 
+$emp_query = "SELECT e.*, u.full_name, d.department_name 
               FROM employees e
+              JOIN users u ON e.user_id = u.user_id
               LEFT JOIN departments d ON e.department_id = d.department_id
               WHERE e.company_id = ? AND e.is_active = 1 
-              ORDER BY e.full_name";
+              ORDER BY u.full_name";
 
 $emp_stmt = $conn->prepare($emp_query);
-$emp_stmt->bind_param('i', $company_id);
-$emp_stmt->execute();
-$employees = $emp_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$emp_stmt->execute([$company_id]);
+$employees = $emp_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get system settings for payroll
 $settings_query = "SELECT setting_key, setting_value FROM system_settings 
                    WHERE company_id = ? AND setting_key IN ('nssf_employee_rate', 'nhif_rate', 'paye_threshold', 'wcf_rate', 'sdl_rate')";
 
 $settings_stmt = $conn->prepare($settings_query);
-$settings_stmt->bind_param('i', $company_id);
-$settings_stmt->execute();
-$settings_result = $settings_stmt->get_result();
+$settings_stmt->execute([$company_id]);
+$settings_rows = $settings_stmt->fetchAll(PDO::FETCH_ASSOC);
 $settings = [];
-while ($row = $settings_result->fetch_assoc()) {
+foreach ($settings_rows as $row) {
     $settings[$row['setting_key']] = $row['setting_value'];
 }
 
@@ -62,12 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] == 'generate') {
         // Create payroll record if not exists
         if (!$payroll) {
-            $insert_query = "INSERT INTO payroll (company_id, payroll_month, payroll_year, status, created_by, created_at) 
-                            VALUES (?, ?, ?, 'draft', ?, NOW())";
+            $insert_query = "INSERT INTO payroll (company_id, payroll_month, payroll_year, status, created_by) 
+                            VALUES (?, ?, ?, 'draft', ?)";
             $insert_stmt = $conn->prepare($insert_query);
-            $insert_stmt->bind_param('iiii', $company_id, $current_month, $current_year, $user_id);
-            $insert_stmt->execute();
-            $payroll_id = $insert_stmt->insert_id;
+            $insert_stmt->execute([$company_id, $current_month, $current_year, $user_id]);
+            $payroll_id = $conn->lastInsertId();
         } else {
             $payroll_id = $payroll['payroll_id'];
         }
@@ -80,11 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 // Get loan deductions
                 $loan_query = "SELECT SUM(monthly_deduction) as loan_deduction 
                               FROM employee_loans 
-                              WHERE employee_id = ? AND status IN ('disbursed', 'completed')";
+                              WHERE employee_id = ? AND status IN ('disbursed', 'active')";
                 $loan_stmt = $conn->prepare($loan_query);
-                $loan_stmt->bind_param('i', $emp['employee_id']);
-                $loan_stmt->execute();
-                $loan_result = $loan_stmt->get_result()->fetch_assoc();
+                $loan_stmt->execute([$emp['employee_id']]);
+                $loan_result = $loan_stmt->fetch(PDO::FETCH_ASSOC);
                 $loan_deduction = floatval($loan_result['loan_deduction'] ?? 0);
                 
                 // Calculate deductions
@@ -103,56 +100,55 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 $taxable_income = $gross_pay - $nssf - $paye_threshold;
                 $paye = $taxable_income > 0 ? $taxable_income * 0.09 : 0; // 9% PAYE
                 
-                $total_deductions = $nssf + $nhif + $wcf + $sdl + $paye + $loan_deduction;
-                $net_pay = $gross_pay - $total_deductions;
-                
                 // Insert or update payroll detail
                 $detail_check = "SELECT payroll_detail_id FROM payroll_details WHERE payroll_id = ? AND employee_id = ?";
                 $detail_check_stmt = $conn->prepare($detail_check);
-                $detail_check_stmt->bind_param('ii', $payroll_id, $emp['employee_id']);
-                $detail_check_stmt->execute();
-                $detail_exists = $detail_check_stmt->get_result()->fetch_assoc();
+                $detail_check_stmt->execute([$payroll_id, $emp['employee_id']]);
+                $detail_exists = $detail_check_stmt->fetch(PDO::FETCH_ASSOC);
                 
                 if (!$detail_exists) {
+                    // Note: gross_salary, total_deductions, net_salary are generated columns
                     $detail_insert = "INSERT INTO payroll_details 
-                                     (payroll_id, company_id, employee_id, basic_salary, gross_pay, paye, nhif, wcf_amount, sdl_amount, loan_deduction, total_deductions, net_pay, created_at)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                                     (payroll_id, employee_id, basic_salary, allowances, overtime_pay, bonus, 
+                                      tax_amount, nssf_amount, nhif_amount, loan_deduction, other_deductions)
+                                     VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)";
                     $detail_stmt = $conn->prepare($detail_insert);
-                    $detail_stmt->bind_param('iiddddddddd', 
-                        $payroll_id, $company_id, $emp['employee_id'], 
-                        $basic_salary, $gross_pay, $paye, $nhif, $wcf, $sdl, 
-                        $loan_deduction, $total_deductions, $net_pay);
-                    $detail_stmt->execute();
+                    $detail_stmt->execute([
+                        $payroll_id, $emp['employee_id'], 
+                        $basic_salary, $paye, $nssf, $nhif, 
+                        $loan_deduction, ($wcf + $sdl)
+                    ]);
                 }
             }
         }
         
-        logActivity($conn, $company_id, $user_id, 'GENERATED', 'payroll', 'payroll', $payroll_id);
-        echo '<div class="alert alert-success">Payroll generated successfully for ' . count($employees) . ' employees.</div>';
+        $_SESSION['success_message'] = 'Payroll generated successfully for ' . count($employees) . ' employees.';
+        header("Location: payroll.php?month=$current_month&year=$current_year");
+        exit;
     } elseif ($_POST['action'] == 'approve') {
         $payroll_id = intval($_POST['payroll_id']);
-        $update_query = "UPDATE payroll SET status = 'completed', approved_by = ?, approved_at = NOW() WHERE payroll_id = ? AND company_id = ?";
+        $update_query = "UPDATE payroll SET status = 'processed', processed_by = ?, processed_at = NOW() WHERE payroll_id = ? AND company_id = ?";
         $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param('iii', $user_id, $payroll_id, $company_id);
-        $update_stmt->execute();
+        $update_stmt->execute([$user_id, $payroll_id, $company_id]);
         
-        logActivity($conn, $company_id, $user_id, 'APPROVED', 'payroll', 'payroll', $payroll_id);
-        echo '<div class="alert alert-success">Payroll approved successfully.</div>';
+        $_SESSION['success_message'] = 'Payroll approved successfully.';
+        header("Location: payroll.php?month=$current_month&year=$current_year");
+        exit;
     }
 }
 
 // Get payroll details if exists
 $details = [];
 if ($payroll) {
-    $details_query = "SELECT pd.*, e.full_name, e.employee_number 
+    $details_query = "SELECT pd.*, u.full_name, e.employee_number 
                      FROM payroll_details pd
                      JOIN employees e ON pd.employee_id = e.employee_id
+                     JOIN users u ON e.user_id = u.user_id
                      WHERE pd.payroll_id = ?
-                     ORDER BY e.full_name";
+                     ORDER BY u.full_name";
     $details_stmt = $conn->prepare($details_query);
-    $details_stmt->bind_param('i', $payroll['payroll_id']);
-    $details_stmt->execute();
-    $details = $details_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $details_stmt->execute([$payroll['payroll_id']]);
+    $details = $details_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -195,7 +191,7 @@ if ($payroll) {
     <?php if ($payroll): ?>
     <div class="card mb-4 border-0 shadow-sm">
         <div class="card-body">
-            <h5>Payroll Status: <span class="badge bg-<?php echo $payroll['status'] == 'paid' ? 'success' : ($payroll['status'] == 'completed' ? 'info' : 'warning'); ?>">
+            <h5>Payroll Status: <span class="badge bg-<?php echo $payroll['status'] == 'paid' ? 'success' : ($payroll['status'] == 'processed' ? 'info' : 'warning'); ?>">
                 <?php echo ucfirst($payroll['status']); ?>
             </span></h5>
             <p>Employees Processed: <?php echo $payroll['employee_count']; ?></p>
@@ -249,23 +245,23 @@ if ($payroll) {
                         $totals = ['basic' => 0, 'nssf' => 0, 'nhif' => 0, 'paye' => 0, 'loan' => 0, 'deductions' => 0, 'net' => 0];
                         foreach ($details as $detail): 
                             $totals['basic'] += $detail['basic_salary'];
-                            $totals['nssf'] += floatval($detail['basic_salary'] ?? 0) * 0.10;
-                            $totals['nhif'] += $detail['nhif'] ?? 0;
-                            $totals['paye'] += $detail['paye'] ?? 0;
+                            $totals['nssf'] += $detail['nssf_amount'] ?? 0;
+                            $totals['nhif'] += $detail['nhif_amount'] ?? 0;
+                            $totals['paye'] += $detail['tax_amount'] ?? 0;
                             $totals['loan'] += $detail['loan_deduction'] ?? 0;
                             $totals['deductions'] += $detail['total_deductions'] ?? 0;
-                            $totals['net'] += $detail['net_pay'] ?? 0;
+                            $totals['net'] += $detail['net_salary'] ?? 0;
                         ?>
                             <tr>
                                 <td><?php echo htmlspecialchars($detail['full_name']); ?></td>
                                 <td><?php echo htmlspecialchars($detail['employee_number']); ?></td>
                                 <td><?php echo number_format($detail['basic_salary'] ?? 0, 2); ?></td>
-                                <td><?php echo number_format(floatval($detail['basic_salary'] ?? 0) * 0.10, 2); ?></td>
-                                <td><?php echo number_format($detail['nhif'] ?? 0, 2); ?></td>
-                                <td><?php echo number_format($detail['paye'] ?? 0, 2); ?></td>
+                                <td><?php echo number_format($detail['nssf_amount'] ?? 0, 2); ?></td>
+                                <td><?php echo number_format($detail['nhif_amount'] ?? 0, 2); ?></td>
+                                <td><?php echo number_format($detail['tax_amount'] ?? 0, 2); ?></td>
                                 <td><?php echo number_format($detail['loan_deduction'] ?? 0, 2); ?></td>
                                 <td><?php echo number_format($detail['total_deductions'] ?? 0, 2); ?></td>
-                                <td><strong><?php echo number_format($detail['net_pay'] ?? 0, 2); ?></strong></td>
+                                <td><strong><?php echo number_format($detail['net_salary'] ?? 0, 2); ?></strong></td>
                             </tr>
                         <?php endforeach; ?>
                         <tr class="table-light fw-bold">
@@ -289,4 +285,4 @@ if ($payroll) {
     </div>
 </div>
 
-<?php include '../../includes/footer.php'; ?>
+<?php require_once '../../includes/footer.php'; ?>

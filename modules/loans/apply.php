@@ -104,64 +104,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $conn->beginTransaction();
             
-            // Generate reference
-            $loan_reference = generateReference($conn, 'LN', 'employee_loans', 'loan_reference', $company_id);
+            // Generate loan number
+            $loan_number = generateReference('LN', $conn, $company_id, 'employee_loans', 'loan_number');
             
-            // Calculate loan schedule
-            $schedule = calculateLoanSchedule($loan_amount, $loan_type['interest_rate'], $loan_term_months);
+            // Calculate monthly deduction (simple calculation)
+            $monthly_interest = ($loan_amount * $loan_type['interest_rate'] / 100) / 12;
+            $monthly_principal = $loan_amount / $loan_term_months;
+            $monthly_deduction = $monthly_principal + $monthly_interest;
+            $total_repayable = $monthly_deduction * $loan_term_months;
             
             // Insert loan application
             $sql = "INSERT INTO employee_loans (
-                        company_id, employee_id, loan_type_id, loan_reference, loan_amount,
-                        interest_rate, loan_term_months, monthly_installment, total_repayable,
+                        company_id, employee_id, loan_type_id, loan_number, loan_amount,
+                        interest_rate, repayment_period_months, monthly_deduction,
                         principal_outstanding, interest_outstanding, total_outstanding,
-                        purpose, status, applied_at, created_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', NOW(), ?)";
+                        purpose, guarantor1_id, guarantor2_id, status, application_date, created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)";
             $stmt = $conn->prepare($sql);
             $stmt->execute([
-                $company_id, $employee['employee_id'], $loan_type_id, $loan_reference, $loan_amount,
-                $loan_type['interest_rate'], $loan_term_months, $schedule['monthly_payment'], $schedule['total_repayable'],
-                $loan_amount, $schedule['total_interest'], $schedule['total_repayable'],
-                $purpose, $user_id
+                $company_id, $employee['employee_id'], $loan_type_id, $loan_number, $loan_amount,
+                $loan_type['interest_rate'], $loan_term_months, $monthly_deduction,
+                $loan_amount, ($total_repayable - $loan_amount), $total_repayable,
+                $purpose, $guarantor1_id, $guarantor2_id, date('Y-m-d'), $user_id
             ]);
             $loan_id = $conn->lastInsertId();
             
-            // Insert repayment schedule
-            foreach ($schedule['schedule'] as $installment) {
+            // Generate repayment schedule
+            $due_date = date('Y-m-d', strtotime('+1 month'));
+            $balance = $loan_amount;
+            for ($i = 1; $i <= $loan_term_months; $i++) {
+                $principal = $monthly_principal;
+                $interest = $monthly_interest;
+                $total = $monthly_deduction;
+                $balance -= $principal;
+                
                 $sql = "INSERT INTO loan_repayment_schedule (
                             loan_id, installment_number, due_date, principal_amount, interest_amount,
-                            total_amount, balance_after, status
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')";
+                            total_amount, balance_outstanding
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)";
                 $stmt = $conn->prepare($sql);
                 $stmt->execute([
-                    $loan_id, $installment['number'], $installment['due_date'],
-                    $installment['principal'], $installment['interest'],
-                    $installment['payment'], $installment['balance']
+                    $loan_id, $i, $due_date, $principal, $interest, $total, max(0, $balance)
                 ]);
-            }
-            
-            // Insert guarantors if provided
-            if ($guarantor1_id) {
-                $sql = "INSERT INTO loan_guarantors (loan_id, guarantor_employee_id, status) VALUES (?, ?, 'PENDING')";
-                $stmt = $conn->prepare($sql);
-                $stmt->execute([$loan_id, $guarantor1_id]);
-            }
-            if ($guarantor2_id) {
-                $sql = "INSERT INTO loan_guarantors (loan_id, guarantor_employee_id, status) VALUES (?, ?, 'PENDING')";
-                $stmt = $conn->prepare($sql);
-                $stmt->execute([$loan_id, $guarantor2_id]);
+                
+                $due_date = date('Y-m-d', strtotime($due_date . ' +1 month'));
             }
             
             // Audit log
             logAudit($conn, $company_id, $user_id, 'create', 'loans', 'employee_loans', $loan_id, null, [
-                'loan_reference' => $loan_reference,
+                'loan_number' => $loan_number,
                 'amount' => $loan_amount,
                 'term' => $loan_term_months
             ]);
             
             $conn->commit();
             
-            $_SESSION['success_message'] = "Loan application submitted successfully! Reference: " . $loan_reference;
+            $_SESSION['success_message'] = "Loan application submitted successfully! Reference: " . $loan_number;
             header('Location: my-loans.php');
             exit;
             

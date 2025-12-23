@@ -121,7 +121,7 @@ if ($date_to) {
 }
 
 if ($search) {
-    $where_clauses[] = "(ec.claim_number LIKE ? OR ec.description LIKE ? OR e.full_name LIKE ?)";
+    $where_clauses[] = "(ec.claim_number LIKE ? OR ec.description LIKE ? OR u.full_name LIKE ?)";
     $search_param = "%$search%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -135,7 +135,7 @@ try {
     $stmt = $conn->prepare("
         SELECT 
             ec.*,
-            e.full_name as employee_name,
+            u_emp.full_name as employee_name,
             e.employee_number,
             d.department_name,
             u.full_name as creator_name,
@@ -144,6 +144,7 @@ try {
             (SELECT COUNT(*) FROM expense_claim_items eci WHERE eci.claim_id = ec.claim_id) as item_count
         FROM expense_claims ec
         LEFT JOIN employees e ON ec.employee_id = e.employee_id
+        LEFT JOIN users u_emp ON e.user_id = u_emp.user_id
         LEFT JOIN departments d ON ec.department_id = d.department_id
         LEFT JOIN users u ON ec.created_by = u.user_id
         LEFT JOIN users approver ON ec.approved_by = approver.user_id
@@ -161,10 +162,11 @@ try {
 // Fetch employees for filter
 try {
     $stmt = $conn->prepare("
-        SELECT e.employee_id, e.full_name, e.employee_number
+        SELECT e.employee_id, u.full_name, e.employee_number
         FROM employees e
+        INNER JOIN users u ON e.user_id = u.user_id
         WHERE e.company_id = ? AND e.is_active = 1
-        ORDER BY e.full_name
+        ORDER BY u.full_name
     ");
     $stmt->execute([$company_id]);
     $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);

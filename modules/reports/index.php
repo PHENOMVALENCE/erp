@@ -15,19 +15,19 @@ $company_id = $_SESSION['company_id'];
 // Quick stats
 $stats = ['employees' => 0, 'assets' => 0, 'loans' => 0, 'leave_requests' => 0];
 try {
-    $stmt = $conn->prepare("SELECT COUNT(*) as c FROM employees WHERE company_id = ? AND is_active = 1");
+    $stmt = $conn->prepare("SELECT COUNT(*) as c FROM employees WHERE company_id = ? AND employment_status = 'active'");
     $stmt->execute([$company_id]);
     $stats['employees'] = $stmt->fetch()['c'];
 } catch (Exception $e) {}
 
 try {
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(current_value), 0) as v FROM assets WHERE company_id = ? AND status = 'ACTIVE'");
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(current_book_value), 0) as v FROM fixed_assets WHERE company_id = ? AND status = 'active'");
     $stmt->execute([$company_id]);
     $stats['assets'] = $stmt->fetch()['v'];
 } catch (Exception $e) {}
 
 try {
-    $stmt = $conn->prepare("SELECT COUNT(*) as c FROM employee_loans WHERE company_id = ? AND status IN ('ACTIVE', 'DISBURSED')");
+    $stmt = $conn->prepare("SELECT COUNT(*) as c FROM employee_loans WHERE company_id = ? AND status IN ('active', 'disbursed')");
     $stmt->execute([$company_id]);
     $stats['loans'] = $stmt->fetch()['c'];
 } catch (Exception $e) {}

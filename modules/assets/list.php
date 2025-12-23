@@ -26,12 +26,15 @@ $department_filter = $_GET['department'] ?? '';
 $search = $_GET['search'] ?? '';
 
 // Build query
-$sql = "SELECT a.*, ac.category_name, ac.depreciation_rate, d.department_name,
-               CONCAT(e.first_name, ' ', e.last_name) as assigned_to_name
-        FROM assets a
+$sql = "SELECT a.*, ac.category_name, ac.depreciation_method, ac.useful_life_years, 
+               (100 / NULLIF(ac.useful_life_years, 0)) as depreciation_rate,
+               d.department_name,
+               u.full_name as assigned_to_name
+        FROM fixed_assets a
         LEFT JOIN asset_categories ac ON a.category_id = ac.category_id
         LEFT JOIN departments d ON a.department_id = d.department_id
-        LEFT JOIN employees e ON a.assigned_to = e.employee_id
+        LEFT JOIN employees e ON a.custodian_id = e.employee_id
+        LEFT JOIN users u ON e.user_id = u.user_id
         WHERE a.company_id = ?";
 $params = [$company_id];
 
@@ -48,7 +51,7 @@ if ($department_filter) {
     $params[] = $department_filter;
 }
 if ($search) {
-    $sql .= " AND (a.asset_name LIKE ? OR a.asset_code LIKE ? OR a.serial_number LIKE ?)";
+    $sql .= " AND (a.asset_name LIKE ? OR a.asset_number LIKE ? OR a.serial_number LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
@@ -60,14 +63,19 @@ $stmt->execute($params);
 $assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get filter options
-$categories = $conn->query("SELECT category_id, category_name FROM asset_categories WHERE (company_id = $company_id OR company_id IS NULL) ORDER BY category_name")->fetchAll(PDO::FETCH_ASSOC);
-$departments = $conn->query("SELECT department_id, department_name FROM departments WHERE company_id = $company_id ORDER BY department_name")->fetchAll(PDO::FETCH_ASSOC);
+$cat_stmt = $conn->prepare("SELECT category_id, category_name FROM asset_categories WHERE company_id = ? ORDER BY category_name");
+$cat_stmt->execute([$company_id]);
+$categories = $cat_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$dept_stmt = $conn->prepare("SELECT department_id, department_name FROM departments WHERE company_id = ? ORDER BY department_name");
+$dept_stmt->execute([$company_id]);
+$departments = $dept_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Calculate totals
 $totals = [
     'count' => count($assets),
     'purchase_cost' => array_sum(array_column($assets, 'purchase_cost')),
-    'current_value' => array_sum(array_column($assets, 'current_value'))
+    'current_value' => array_sum(array_column($assets, 'current_book_value'))
 ];
 
 $page_title = "Asset Register";
@@ -243,12 +251,12 @@ require_once '../../includes/header.php';
                             <?php else: ?>
                             <?php foreach ($assets as $a): 
                                 $dep_percent = $a['purchase_cost'] > 0 ? 
-                                    (($a['purchase_cost'] - $a['current_value']) / $a['purchase_cost']) * 100 : 0;
+                                    (($a['purchase_cost'] - $a['current_book_value']) / $a['purchase_cost']) * 100 : 0;
                             ?>
                             <tr>
                                 <td>
                                     <strong><?php echo htmlspecialchars($a['asset_name']); ?></strong>
-                                    <br><code><?php echo htmlspecialchars($a['asset_code']); ?></code>
+                                    <br><code><?php echo htmlspecialchars($a['asset_number']); ?></code>
                                     <?php if ($a['serial_number']): ?>
                                     <br><small class="text-muted">S/N: <?php echo htmlspecialchars($a['serial_number']); ?></small>
                                     <?php endif; ?>
@@ -257,7 +265,7 @@ require_once '../../includes/header.php';
                                 <td><?php echo date('M d, Y', strtotime($a['purchase_date'])); ?></td>
                                 <td><?php echo formatCurrency($a['purchase_cost']); ?></td>
                                 <td>
-                                    <strong><?php echo formatCurrency($a['current_value']); ?></strong>
+                                    <strong><?php echo formatCurrency($a['current_book_value']); ?></strong>
                                 </td>
                                 <td>
                                     <small><?php echo round($dep_percent); ?>%</small>

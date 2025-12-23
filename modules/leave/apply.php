@@ -19,7 +19,7 @@ $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
 
-$employee = getEmployeeByUserId($conn, $user_id);
+$employee = getEmployeeByUserId($conn, $user_id, $company_id);
 
 if (!$employee) {
     $_SESSION['error_message'] = "You must be registered as an employee to apply for leave.";

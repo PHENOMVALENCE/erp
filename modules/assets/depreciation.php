@@ -31,13 +31,14 @@ $selected_year = substr($selected_month, 0, 4);
 $selected_month_num = substr($selected_month, 5, 2);
 
 // Get assets with depreciation info
-$sql = "SELECT a.*, ac.category_name, ac.depreciation_rate, ac.depreciation_method,
-               (a.purchase_cost * ac.depreciation_rate / 100 / 12) as monthly_depreciation,
-               (SELECT MAX(depreciation_date) FROM asset_depreciation WHERE asset_id = a.asset_id) as last_depreciation,
+$sql = "SELECT a.*, ac.category_name, ac.depreciation_method, ac.useful_life_years,
+               (100 / NULLIF(ac.useful_life_years, 0)) as depreciation_rate,
+               (a.purchase_cost * (100 / NULLIF(ac.useful_life_years, 0)) / 100 / 12) as monthly_depreciation,
+               (SELECT MAX(period_date) FROM asset_depreciation WHERE asset_id = a.asset_id) as last_depreciation,
                (SELECT SUM(depreciation_amount) FROM asset_depreciation WHERE asset_id = a.asset_id) as total_depreciated
-        FROM assets a
+        FROM fixed_assets a
         JOIN asset_categories ac ON a.category_id = ac.category_id
-        WHERE a.company_id = ? AND a.status = 'ACTIVE' AND a.current_value > 0
+        WHERE a.company_id = ? AND a.status = 'active' AND a.current_book_value > 0
         ORDER BY ac.category_name, a.asset_name";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
@@ -45,19 +46,19 @@ $assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Check if depreciation already run for selected month
 $sql = "SELECT COUNT(*) as count FROM asset_depreciation 
-        WHERE asset_id IN (SELECT asset_id FROM assets WHERE company_id = ?)
-        AND YEAR(depreciation_date) = ? AND MONTH(depreciation_date) = ?";
+        WHERE asset_id IN (SELECT asset_id FROM fixed_assets WHERE company_id = ?)
+        AND YEAR(period_date) = ? AND MONTH(period_date) = ?";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id, $selected_year, $selected_month_num]);
 $already_run = $stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0;
 
 // Get depreciation history
-$sql = "SELECT ad.*, a.asset_name, a.asset_code, ac.category_name
+$sql = "SELECT ad.*, a.asset_name, a.asset_number as asset_code, ac.category_name
         FROM asset_depreciation ad
-        JOIN assets a ON ad.asset_id = a.asset_id
+        JOIN fixed_assets a ON ad.asset_id = a.asset_id
         LEFT JOIN asset_categories ac ON a.category_id = ac.category_id
         WHERE a.company_id = ?
-        ORDER BY ad.depreciation_date DESC, a.asset_name
+        ORDER BY ad.period_date DESC, a.asset_name
         LIMIT 50";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
@@ -221,7 +222,7 @@ require_once '../../includes/header.php';
                                         </td>
                                         <td><?php echo formatCurrency($a['purchase_cost']); ?></td>
                                         <td>
-                                            <?php echo formatCurrency($a['current_value']); ?>
+                                            <?php echo formatCurrency($a['current_book_value']); ?>
                                             <?php if ($a['total_depreciated']): ?>
                                             <br><small class="text-danger">-<?php echo formatCurrency($a['total_depreciated']); ?></small>
                                             <?php endif; ?>
@@ -269,7 +270,7 @@ require_once '../../includes/header.php';
                                     <?php else: ?>
                                     <?php foreach ($history as $h): ?>
                                     <tr>
-                                        <td><?php echo date('M Y', strtotime($h['depreciation_date'])); ?></td>
+                                        <td><?php echo date('M Y', strtotime($h['period_date'])); ?></td>
                                         <td>
                                             <?php echo htmlspecialchars($h['asset_name']); ?>
                                             <br><small class="text-muted"><?php echo htmlspecialchars($h['asset_code']); ?></small>

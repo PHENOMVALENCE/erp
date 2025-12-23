@@ -127,10 +127,7 @@ require_once '../../includes/header.php';
         <div class="col-md-3"><a href="request.php" class="action-card"><i class="fas fa-hand-holding-usd"></i><h5>Request Cash</h5><p class="text-muted small mb-0">Submit expense request</p></a></div>
         <?php if ($is_finance): ?>
         <div class="col-md-3"><a href="approvals.php" class="action-card"><i class="fas fa-clipboard-check"></i><h5>Approvals</h5><p class="text-muted small mb-0">Review requests</p></a></div>
-        <div class="col-md-3"><a href="replenish.php" class="action-card"><i class="fas fa-plus-circle"></i><h5>Replenish</h5><p class="text-muted small mb-0">Add funds</p></a></div>
-        <div class="col-md-3"><a href="accounts.php" class="action-card"><i class="fas fa-cog"></i><h5>Accounts</h5><p class="text-muted small mb-0">Manage accounts</p></a></div>
-        <?php else: ?>
-        <div class="col-md-3"><a href="my-requests.php" class="action-card"><i class="fas fa-history"></i><h5>My Requests</h5><p class="text-muted small mb-0">View request history</p></a></div>
+        <div class="col-md-3"><a href="process.php" class="action-card" onclick="event.preventDefault();window.location='approvals.php';"><i class="fas fa-stream"></i><h5>Process Queue</h5><p class="text-muted small mb-0">Open approvals list</p></a></div>
         <?php endif; ?>
     </div>
 

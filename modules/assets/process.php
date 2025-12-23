@@ -46,8 +46,8 @@ try {
             
             // Check if already run
             $sql = "SELECT COUNT(*) as count FROM asset_depreciation 
-                    WHERE asset_id IN (SELECT asset_id FROM assets WHERE company_id = ?)
-                    AND YEAR(depreciation_date) = ? AND MONTH(depreciation_date) = ?";
+                    WHERE asset_id IN (SELECT asset_id FROM fixed_assets WHERE company_id = ?)
+                    AND YEAR(period_date) = ? AND MONTH(period_date) = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$company_id, $year, $month]);
             if ($stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {
@@ -55,10 +55,10 @@ try {
             }
             
             // Get assets with depreciation info
-            $sql = "SELECT a.*, ac.depreciation_rate, ac.depreciation_method
-                    FROM assets a
+            $sql = "SELECT a.*, ac.depreciation_method, ac.useful_life_years, ac.salvage_value_percentage
+                    FROM fixed_assets a
                     JOIN asset_categories ac ON a.category_id = ac.category_id
-                    WHERE a.company_id = ? AND a.status = 'ACTIVE' AND a.current_value > 0";
+                    WHERE a.company_id = ? AND a.status = 'active' AND a.current_book_value > 0";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$company_id]);
             $assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -72,35 +72,43 @@ try {
             $total_depreciation = 0;
             foreach ($assets as $asset) {
                 // Calculate depreciation based on method
-                $method = $asset['depreciation_method'] ?? 'STRAIGHT_LINE';
+                $method = $asset['depreciation_method'] ?? 'straight_line';
+                $useful_life_years = $asset['useful_life_years'] ?? 5;
+                $salvage_percentage = $asset['salvage_value_percentage'] ?? 10;
+                $salvage_value = $asset['purchase_cost'] * ($salvage_percentage / 100);
+                $depreciable_cost = $asset['purchase_cost'] - $salvage_value;
                 
-                if ($method === 'DECLINING_BALANCE') {
-                    $depreciation = $asset['current_value'] * ($asset['depreciation_rate'] / 100 / 12);
+                if ($method === 'declining_balance') {
+                    $rate = 2 / $useful_life_years; // Double declining balance
+                    $depreciation = $asset['current_book_value'] * ($rate / 12);
                 } else {
                     // Straight line
-                    $depreciation = $asset['purchase_cost'] * ($asset['depreciation_rate'] / 100 / 12);
+                    $depreciation = $depreciable_cost / ($useful_life_years * 12);
                 }
                 
-                // Don't depreciate below zero
-                $depreciation = min($depreciation, $asset['current_value']);
+                // Don't depreciate below salvage value
+                $min_value = $salvage_value;
+                $depreciation = min($depreciation, max(0, $asset['current_book_value'] - $min_value));
                 
                 if ($depreciation > 0) {
-                    $new_value = $asset['current_value'] - $depreciation;
+                    $new_value = max($min_value, $asset['current_book_value'] - $depreciation);
+                    $new_accumulated = ($asset['accumulated_depreciation'] ?? 0) + $depreciation;
                     
                     // Record depreciation
-                    $sql = "INSERT INTO asset_depreciation (asset_id, depreciation_date, depreciation_amount, 
-                                book_value_before, book_value_after, depreciation_method, created_by)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)";
+                    $sql = "INSERT INTO asset_depreciation (asset_id, period_date, depreciation_amount, 
+                                accumulated_depreciation, book_value, created_by)
+                            VALUES (?, ?, ?, ?, ?, ?)";
                     $stmt = $conn->prepare($sql);
                     $stmt->execute([
                         $asset['asset_id'], $depreciation_date, $depreciation,
-                        $asset['current_value'], $new_value, $method, $user_id
+                        $new_accumulated, $new_value, $user_id
                     ]);
                     
-                    // Update asset current value
-                    $sql = "UPDATE assets SET current_value = ?, updated_at = NOW() WHERE asset_id = ?";
+                    // Update asset current book value and accumulated depreciation
+                    $sql = "UPDATE fixed_assets SET current_book_value = ?, accumulated_depreciation = ?, 
+                            last_depreciation_date = ?, updated_at = NOW() WHERE asset_id = ?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->execute([$new_value, $asset['asset_id']]);
+                    $stmt->execute([$new_value, $new_accumulated, $depreciation_date, $asset['asset_id']]);
                     
                     $total_depreciation += $depreciation;
                 }
@@ -126,7 +134,7 @@ try {
             $estimated_cost = (float)($_POST['estimated_cost'] ?? 0);
             
             // Verify asset
-            $sql = "SELECT * FROM assets WHERE asset_id = ? AND company_id = ?";
+            $sql = "SELECT * FROM fixed_assets WHERE asset_id = ? AND company_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$asset_id, $company_id]);
             if (!$stmt->fetch()) {
@@ -157,7 +165,7 @@ try {
             $disposal_value = (float)($_POST['disposal_value'] ?? 0);
             
             // Get asset
-            $sql = "SELECT * FROM assets WHERE asset_id = ? AND company_id = ?";
+            $sql = "SELECT * FROM fixed_assets WHERE asset_id = ? AND company_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$asset_id, $company_id]);
             $asset = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -166,8 +174,8 @@ try {
                 throw new Exception("Asset not found.");
             }
             
-            $sql = "UPDATE assets SET status = 'DISPOSED', disposal_date = ?, disposal_reason = ?, 
-                        disposal_value = ?, updated_at = NOW() WHERE asset_id = ?";
+            $sql = "UPDATE fixed_assets SET status = 'disposed', disposal_date = ?, disposal_reason = ?, 
+                        disposal_amount = ?, updated_at = NOW() WHERE asset_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$disposal_date, $disposal_reason, $disposal_value, $asset_id]);
             
@@ -225,7 +233,7 @@ try {
             $category_id = (int)$_POST['category_id'];
             
             // Check if in use
-            $sql = "SELECT COUNT(*) as count FROM assets WHERE category_id = ?";
+            $sql = "SELECT COUNT(*) as count FROM fixed_assets WHERE category_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$category_id]);
             if ($stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {

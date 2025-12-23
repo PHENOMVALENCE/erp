@@ -644,16 +644,6 @@ require_once '../../includes/header.php';
                             <div class="info-label">Name:</div>
                             <div class="info-value"><?php echo htmlspecialchars($customer['guardian1_name']); ?></div>
                         </div>
-                        <?php if ($customer['guardian1_phone']): ?>
-                        <div class="info-row">
-                            <div class="info-label">Phone:</div>
-                            <div class="info-value">
-                                <a href="tel:<?php echo htmlspecialchars($customer['guardian1_phone']); ?>">
-                                    <i class="fas fa-phone-alt me-1"></i><?php echo htmlspecialchars($customer['guardian1_phone']); ?>
-                                </a>
-                            </div>
-                        </div>
-                        <?php endif; ?>
                         <?php if ($customer['guardian1_relationship']): ?>
                         <div class="info-row">
                             <div class="info-label">Relationship:</div>
@@ -668,16 +658,6 @@ require_once '../../includes/header.php';
                             <div class="info-label">Name:</div>
                             <div class="info-value"><?php echo htmlspecialchars($customer['guardian2_name']); ?></div>
                         </div>
-                        <?php if ($customer['guardian2_phone']): ?>
-                        <div class="info-row">
-                            <div class="info-label">Phone:</div>
-                            <div class="info-value">
-                                <a href="tel:<?php echo htmlspecialchars($customer['guardian2_phone']); ?>">
-                                    <i class="fas fa-phone-alt me-1"></i><?php echo htmlspecialchars($customer['guardian2_phone']); ?>
-                                </a>
-                            </div>
-                        </div>
-                        <?php endif; ?>
                         <?php if ($customer['guardian2_relationship']): ?>
                         <div class="info-row">
                             <div class="info-label">Relationship:</div>
@@ -692,42 +672,6 @@ require_once '../../includes/header.php';
                     </div>
                 </div>
 
-                <div class="col-md-6">
-                    <div class="info-card">
-                        <div class="info-card-header">
-                            <i class="fas fa-user-friends me-2 text-primary"></i>Next of Kin
-                        </div>
-
-                        <?php if ($customer['next_of_kin_name']): ?>
-                        <div class="info-row">
-                            <div class="info-label">Name:</div>
-                            <div class="info-value"><?php echo htmlspecialchars($customer['next_of_kin_name']); ?></div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if ($customer['next_of_kin_phone']): ?>
-                        <div class="info-row">
-                            <div class="info-label">Phone:</div>
-                            <div class="info-value">
-                                <a href="tel:<?php echo htmlspecialchars($customer['next_of_kin_phone']); ?>">
-                                    <i class="fas fa-phone-alt me-1"></i><?php echo htmlspecialchars($customer['next_of_kin_phone']); ?>
-                                </a>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if ($customer['next_of_kin_relationship']): ?>
-                        <div class="info-row">
-                            <div class="info-label">Relationship:</div>
-                            <div class="info-value"><?php echo ucfirst($customer['next_of_kin_relationship']); ?></div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if (!$customer['next_of_kin_name']): ?>
-                        <p class="text-muted mb-0">No next of kin information provided</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
             </div>
 
             <!-- Additional Information -->

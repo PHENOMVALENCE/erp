@@ -116,10 +116,9 @@ require_once '../../includes/header.php';
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3"><a href="generate.php" class="action-card"><i class="fas fa-play-circle"></i><h5>Run Payroll</h5><p class="text-muted small mb-0">Process monthly payroll</p></a></div>
-        <div class="col-md-3"><a href="payslips.php" class="action-card"><i class="fas fa-file-invoice"></i><h5>Payslips</h5><p class="text-muted small mb-0">Generate payslips</p></a></div>
-        <div class="col-md-3"><a href="history.php" class="action-card"><i class="fas fa-history"></i><h5>History</h5><p class="text-muted small mb-0">Previous payrolls</p></a></div>
-        <div class="col-md-3"><a href="settings.php" class="action-card"><i class="fas fa-cog"></i><h5>Settings</h5><p class="text-muted small mb-0">Configure payroll</p></a></div>
+        <div class="col-md-4"><a href="generate.php" class="action-card"><i class="fas fa-play-circle"></i><h5>Run Payroll</h5><p class="text-muted small mb-0">Process monthly payroll</p></a></div>
+        <div class="col-md-4"><a href="payslips.php" class="action-card"><i class="fas fa-file-invoice"></i><h5>Payslips</h5><p class="text-muted small mb-0">Generate payslips</p></a></div>
+        <div class="col-md-4"><a href="history.php" class="action-card"><i class="fas fa-history"></i><h5>History</h5><p class="text-muted small mb-0">Previous payrolls</p></a></div>
     </div>
 
     <div class="row">
@@ -131,7 +130,7 @@ require_once '../../includes/header.php';
                 <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover">
-                        <thead class="table-light"><tr><th>Period</th><th>Employees</th><th>Run Date</th><th>Status</th><th>Action</th></tr></thead>
+                        <thead class="table-light"><tr><th>Period</th><th>Employees</th><th>Run Date</th><th>Status</th></tr></thead>
                         <tbody>
                             <?php foreach ($recent_payrolls as $pr): ?>
                             <tr>
@@ -139,7 +138,6 @@ require_once '../../includes/header.php';
                                 <td>-</td>
                                 <td><?= date('M d, Y', strtotime($pr['run_date'])) ?></td>
                                 <td><span class="status-badge <?= strtolower($pr['status']) ?>"><?= ucfirst(strtolower($pr['status'])) ?></span></td>
-                                <td><a href="view.php?period=<?= $pr['period'] ?>" class="btn btn-sm btn-outline-primary">View</a></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>

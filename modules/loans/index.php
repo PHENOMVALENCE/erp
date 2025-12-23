@@ -43,7 +43,7 @@ try {
 $my_loans = [];
 if ($employee) {
     try {
-        $stmt = $conn->prepare("SELECT el.*, el.loan_number as loan_reference, lt.type_name as loan_type_name FROM employee_loans el
+        $stmt = $conn->prepare("SELECT el.*, el.loan_number, lt.type_name as loan_type_name FROM employee_loans el
             JOIN loan_types lt ON el.loan_type_id = lt.loan_type_id
             WHERE el.employee_id = ? ORDER BY el.created_at DESC LIMIT 5");
         $stmt->execute([$employee['employee_id']]);
@@ -151,7 +151,7 @@ require_once '../../includes/header.php';
                         <tbody>
                             <?php foreach ($my_loans as $loan): ?>
                             <tr>
-                                <td><code><?= htmlspecialchars($loan['loan_reference']) ?></code></td>
+                                <td><code><?= htmlspecialchars($loan['loan_number']) ?></code></td>
                                 <td><?= htmlspecialchars($loan['loan_type_name']) ?></td>
                                 <td>TSH <?= number_format($loan['loan_amount']) ?></td>
                                 <td class="text-danger">TSH <?= number_format($loan['total_outstanding']) ?></td>

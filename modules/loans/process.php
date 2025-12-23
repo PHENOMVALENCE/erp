@@ -33,10 +33,10 @@ $action = $_POST['action'] ?? '';
 $loan_id = (int)($_POST['loan_id'] ?? 0);
 
 // Verify loan exists and belongs to company
-$sql = "SELECT el.*, e.employee_id, e.first_name, e.last_name, u.email
+$sql = "SELECT el.*, e.employee_id, u.full_name as employee_name, u.email
         FROM employee_loans el
         JOIN employees e ON el.employee_id = e.employee_id
-        LEFT JOIN users u ON e.user_id = u.id
+        JOIN users u ON e.user_id = u.user_id
         WHERE el.loan_id = ? AND el.company_id = ?";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$loan_id, $company_id]);
@@ -56,14 +56,14 @@ try {
                 throw new Exception("You don't have permission to approve loans.");
             }
             
-            if ($loan['status'] !== 'PENDING') {
+            if ($loan['status'] !== 'pending') {
                 throw new Exception("Only pending loans can be approved.");
             }
             
             $comments = sanitize($_POST['comments'] ?? '');
             
             $sql = "UPDATE employee_loans 
-                    SET status = 'APPROVED', approved_by = ?, approved_at = NOW(), approval_comments = ?
+                    SET status = 'approved', approved_by = ?, approved_at = NOW(), notes = ?
                     WHERE loan_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$user_id, $comments, $loan_id]);
@@ -82,7 +82,7 @@ try {
                 throw new Exception("You don't have permission to reject loans.");
             }
             
-            if ($loan['status'] !== 'PENDING') {
+            if ($loan['status'] !== 'pending') {
                 throw new Exception("Only pending loans can be rejected.");
             }
             
@@ -92,13 +92,13 @@ try {
             }
             
             $sql = "UPDATE employee_loans 
-                    SET status = 'REJECTED', approved_by = ?, approved_at = NOW(), rejection_reason = ?
+                    SET status = 'rejected', approved_by = ?, approved_at = NOW(), rejection_reason = ?
                     WHERE loan_id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$user_id, $rejection_reason, $loan_id]);
             
             logAudit($conn, $company_id, $user_id, 'reject', 'loans', 'employee_loans', $loan_id,
-                     ['status' => 'PENDING'], ['status' => 'REJECTED', 'reason' => $rejection_reason]);
+                     ['status' => 'pending'], ['status' => 'rejected', 'reason' => $rejection_reason]);
             
             $_SESSION['success_message'] = "Loan application rejected.";
             break;
@@ -109,23 +109,24 @@ try {
                 throw new Exception("You don't have permission to disburse loans.");
             }
             
-            if ($loan['status'] !== 'APPROVED') {
+            if ($loan['status'] !== 'approved') {
                 throw new Exception("Only approved loans can be disbursed.");
             }
             
             $disbursement_date = $_POST['disbursement_date'] ?? date('Y-m-d');
-            $payment_method = sanitize($_POST['payment_method'] ?? 'BANK_TRANSFER');
-            $payment_reference = sanitize($_POST['payment_reference'] ?? '');
+            $disbursement_method = sanitize($_POST['payment_method'] ?? 'bank_transfer');
+            $disbursement_reference = sanitize($_POST['payment_reference'] ?? '');
+            $bank_account_id = !empty($_POST['bank_account_id']) ? (int)$_POST['bank_account_id'] : null;
             
             $conn->beginTransaction();
             
             // Update loan status
             $sql = "UPDATE employee_loans 
-                    SET status = 'DISBURSED', disbursed_at = ?, disbursed_by = ?,
-                        payment_method = ?, payment_reference = ?
+                    SET status = 'disbursed', disbursement_date = ?,
+                        disbursement_method = ?, disbursement_reference = ?, bank_account_id = ?
                     WHERE loan_id = ?";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$disbursement_date, $user_id, $payment_method, $payment_reference, $loan_id]);
+            $stmt->execute([$disbursement_date, $disbursement_method, $disbursement_reference, $bank_account_id, $loan_id]);
             
             // Update repayment schedule due dates based on disbursement date
             $sql = "SELECT * FROM loan_repayment_schedule WHERE loan_id = ? ORDER BY installment_number";
@@ -140,16 +141,16 @@ try {
                 $stmt->execute([$due_date, $schedule['schedule_id']]);
             }
             
-            // Set first payment start date
-            $first_payment_date = date('Y-m-d', strtotime($disbursement_date . ' +1 month'));
-            $sql = "UPDATE employee_loans SET repayment_start_date = ? WHERE loan_id = ?";
+            // Set next payment date
+            $next_payment_date = date('Y-m-d', strtotime($disbursement_date . ' +1 month'));
+            $sql = "UPDATE employee_loans SET next_payment_date = ? WHERE loan_id = ?";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$first_payment_date, $loan_id]);
+            $stmt->execute([$next_payment_date, $loan_id]);
             
             $conn->commit();
             
             logAudit($conn, $company_id, $user_id, 'disburse', 'loans', 'employee_loans', $loan_id,
-                     ['status' => 'APPROVED'], ['status' => 'DISBURSED', 'date' => $disbursement_date]);
+                     ['status' => 'approved'], ['status' => 'disbursed', 'date' => $disbursement_date]);
             
             $_SESSION['success_message'] = "Loan disbursed successfully. Repayments start from " . date('M Y', strtotime($first_payment_date));
             break;
@@ -160,7 +161,7 @@ try {
                 throw new Exception("You don't have permission to record payments.");
             }
             
-            if (!in_array($loan['status'], ['DISBURSED', 'ACTIVE'])) {
+            if (!in_array($loan['status'], ['disbursed', 'active'])) {
                 throw new Exception("Can only record payments for disbursed or active loans.");
             }
             
@@ -181,50 +182,52 @@ try {
             
             // Get next pending installment
             $sql = "SELECT * FROM loan_repayment_schedule 
-                    WHERE loan_id = ? AND status = 'PENDING' 
+                    WHERE loan_id = ? AND payment_status = 'pending' 
                     ORDER BY installment_number LIMIT 1";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$loan_id]);
             $installment = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Record payment
-            $payment_ref = generateReference($conn, 'LP', 'loan_payments', 'payment_reference', $company_id);
-            $sql = "INSERT INTO loan_payments (
-                        loan_id, schedule_id, payment_reference, payment_date, amount_paid,
-                        principal_paid, interest_paid, payment_method, payment_reference_external,
-                        recorded_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($sql);
-            
             // Allocate payment to principal and interest
             $interest_portion = min($payment_amount, $loan['interest_outstanding']);
             $principal_portion = $payment_amount - $interest_portion;
+            $total_paid = $principal_portion + $interest_portion;
             
+            // Record payment
+            $sql = "INSERT INTO loan_payments (
+                        loan_id, schedule_id, payment_date, principal_paid, interest_paid,
+                        total_paid, payment_method, payment_reference, created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
             $stmt->execute([
-                $loan_id, $installment ? $installment['schedule_id'] : null, $payment_ref,
-                $payment_date, $payment_amount, $principal_portion, $interest_portion,
+                $loan_id, $installment ? $installment['schedule_id'] : null,
+                $payment_date, $principal_portion, $interest_portion, $total_paid,
                 $payment_method, $payment_reference, $user_id
             ]);
             
             // Update loan outstanding balances
-            $new_principal = $loan['principal_outstanding'] - $principal_portion;
-            $new_interest = $loan['interest_outstanding'] - $interest_portion;
+            $new_principal = max(0, $loan['principal_outstanding'] - $principal_portion);
+            $new_interest = max(0, $loan['interest_outstanding'] - $interest_portion);
             $new_total = $new_principal + $new_interest;
             
-            $new_status = $new_total <= 0 ? 'COMPLETED' : ($loan['status'] === 'DISBURSED' ? 'ACTIVE' : $loan['status']);
+            $new_status = $new_total <= 0 ? 'completed' : ($loan['status'] === 'disbursed' ? 'active' : $loan['status']);
             
             $sql = "UPDATE employee_loans 
                     SET principal_outstanding = ?, interest_outstanding = ?, total_outstanding = ?,
-                        status = ?, last_payment_date = ?
+                        status = ?, last_payment_date = ?, total_paid = total_paid + ?
                     WHERE loan_id = ?";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$new_principal, $new_interest, $new_total, $new_status, $payment_date, $loan_id]);
+            $stmt->execute([$new_principal, $new_interest, $new_total, $new_status, $payment_date, $total_paid, $loan_id]);
             
             // Update installment status if fully paid
-            if ($installment && $payment_amount >= $installment['total_amount']) {
-                $sql = "UPDATE loan_repayment_schedule SET status = 'PAID', paid_date = ? WHERE schedule_id = ?";
+            if ($installment && $total_paid >= $installment['total_amount']) {
+                $sql = "UPDATE loan_repayment_schedule SET payment_status = 'paid', paid_date = ?, paid_amount = ? WHERE schedule_id = ?";
                 $stmt = $conn->prepare($sql);
-                $stmt->execute([$payment_date, $installment['schedule_id']]);
+                $stmt->execute([$payment_date, $total_paid, $installment['schedule_id']]);
+            } elseif ($installment && $total_paid > 0) {
+                $sql = "UPDATE loan_repayment_schedule SET payment_status = 'partial', paid_amount = ? WHERE schedule_id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->execute([$total_paid, $installment['schedule_id']]);
             }
             
             $conn->commit();

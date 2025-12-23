@@ -30,7 +30,7 @@ $asset_id = (int)($_GET['id'] ?? 0);
 $asset = null;
 
 if ($asset_id) {
-    $sql = "SELECT * FROM assets WHERE asset_id = ? AND company_id = ?";
+    $sql = "SELECT * FROM fixed_assets WHERE asset_id = ? AND company_id = ?";
     $stmt = $conn->prepare($sql);
     $stmt->execute([$asset_id, $company_id]);
     $asset = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -42,7 +42,7 @@ if ($asset_id) {
 }
 
 // Get categories
-$sql = "SELECT * FROM asset_categories WHERE (company_id = ? OR company_id IS NULL) AND is_active = 1 ORDER BY category_name";
+$sql = "SELECT * FROM asset_categories WHERE company_id = ? ORDER BY category_name";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -54,7 +54,11 @@ $stmt->execute([$company_id]);
 $departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get employees for assignment
-$sql = "SELECT employee_id, first_name, last_name, employee_number FROM employees WHERE company_id = ? AND is_active = 1 ORDER BY first_name";
+$sql = "SELECT e.employee_id, u.full_name, e.employee_number 
+        FROM employees e
+        INNER JOIN users u ON e.user_id = u.user_id
+        WHERE e.company_id = ? AND e.is_active = 1 
+        ORDER BY u.full_name";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$company_id]);
 $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -63,27 +67,37 @@ $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $asset_name = sanitize($_POST['asset_name']);
-    $asset_code = sanitize($_POST['asset_code']);
+    $asset_number = sanitize($_POST['asset_code'] ?? ''); // Form field is asset_code but DB column is asset_number
     $category_id = (int)$_POST['category_id'];
-    $description = sanitize($_POST['description']);
-    $serial_number = sanitize($_POST['serial_number']);
+    $description = sanitize($_POST['description'] ?? '');
+    $serial_number = sanitize($_POST['serial_number'] ?? '');
+    $model_number = sanitize($_POST['model_number'] ?? '');
+    $manufacturer = sanitize($_POST['manufacturer'] ?? '');
     $purchase_date = $_POST['purchase_date'];
     $purchase_cost = (float)$_POST['purchase_cost'];
-    $current_value = (float)($_POST['current_value'] ?? $purchase_cost);
-    $supplier = sanitize($_POST['supplier']);
-    $warranty_expiry = $_POST['warranty_expiry'] ?: null;
-    $location = sanitize($_POST['location']);
+    $installation_cost = (float)($_POST['installation_cost'] ?? 0);
+    $total_cost = $purchase_cost + $installation_cost;
+    $supplier_id = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
+    $invoice_number = sanitize($_POST['invoice_number'] ?? '');
+    $warranty_expiry_date = !empty($_POST['warranty_expiry']) ? $_POST['warranty_expiry'] : null;
+    $location = sanitize($_POST['location'] ?? '');
     $department_id = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
-    $assigned_to = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
-    $status = sanitize($_POST['status']);
-    $notes = sanitize($_POST['notes']);
+    $custodian_id = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : null;
+    $status = sanitize($_POST['status'] ?? 'active');
+    $account_code = sanitize($_POST['account_code'] ?? '1210');
+    $depreciation_account_code = sanitize($_POST['depreciation_account_code'] ?? '1250');
+    $depreciation_method = sanitize($_POST['depreciation_method'] ?? 'straight_line');
+    $useful_life_years = (int)($_POST['useful_life_years'] ?? 5);
+    $salvage_value = (float)($_POST['salvage_value'] ?? 0);
+    $current_book_value = (float)($_POST['current_value'] ?? $total_cost);
+    $notes = sanitize($_POST['notes'] ?? '');
     
     // Validation
     if (empty($asset_name)) {
         $errors[] = "Asset name is required.";
     }
-    if (empty($asset_code)) {
-        $errors[] = "Asset code is required.";
+    if (empty($asset_number)) {
+        $errors[] = "Asset number is required.";
     }
     if (!$category_id) {
         $errors[] = "Please select a category.";
@@ -95,54 +109,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Purchase date is required.";
     }
     
-    // Check for duplicate asset code
-    $check_sql = "SELECT COUNT(*) as count FROM assets WHERE company_id = ? AND asset_code = ? AND asset_id != ?";
+    // Check for duplicate asset number
+    $check_sql = "SELECT COUNT(*) as count FROM fixed_assets WHERE company_id = ? AND asset_number = ? AND asset_id != ?";
     $stmt = $conn->prepare($check_sql);
-    $stmt->execute([$company_id, $asset_code, $asset_id]);
+    $stmt->execute([$company_id, $asset_number, $asset_id]);
     if ($stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0) {
-        $errors[] = "An asset with this code already exists.";
+        $errors[] = "An asset with this number already exists.";
     }
     
     if (empty($errors)) {
         try {
             if ($asset_id) {
                 // Update existing asset
-                $sql = "UPDATE assets SET 
-                            asset_name = ?, asset_code = ?, category_id = ?, description = ?,
-                            serial_number = ?, purchase_date = ?, purchase_cost = ?, current_value = ?,
-                            supplier = ?, warranty_expiry = ?, location = ?, department_id = ?,
-                            assigned_to = ?, status = ?, notes = ?, updated_at = NOW()
+                $sql = "UPDATE fixed_assets SET 
+                            asset_name = ?, asset_number = ?, category_id = ?, description = ?,
+                            serial_number = ?, model_number = ?, manufacturer = ?,
+                            purchase_date = ?, purchase_cost = ?, installation_cost = ?, total_cost = ?,
+                            supplier_id = ?, invoice_number = ?, warranty_expiry_date = ?,
+                            location = ?, department_id = ?, custodian_id = ?,
+                            account_code = ?, depreciation_account_code = ?, depreciation_method = ?,
+                            useful_life_years = ?, salvage_value = ?, current_book_value = ?,
+                            status = ?, notes = ?, updated_at = NOW()
                         WHERE asset_id = ? AND company_id = ?";
                 $stmt = $conn->prepare($sql);
                 $stmt->execute([
-                    $asset_name, $asset_code, $category_id, $description, $serial_number,
-                    $purchase_date, $purchase_cost, $current_value, $supplier, $warranty_expiry,
-                    $location, $department_id, $assigned_to, $status, $notes, $asset_id, $company_id
+                    $asset_name, $asset_number, $category_id, $description,
+                    $serial_number, $model_number, $manufacturer,
+                    $purchase_date, $purchase_cost, $installation_cost, $total_cost,
+                    $supplier_id, $invoice_number, $warranty_expiry_date,
+                    $location, $department_id, $custodian_id,
+                    $account_code, $depreciation_account_code, $depreciation_method,
+                    $useful_life_years, $salvage_value, $current_book_value,
+                    $status, $notes, $asset_id, $company_id
                 ]);
                 
-                logAudit($conn, $company_id, $user_id, 'update', 'assets', 'assets', $asset_id, 
+                logAudit($conn, $company_id, $user_id, 'update', 'assets', 'fixed_assets', $asset_id, 
                          $asset, ['asset_name' => $asset_name]);
                 
                 $_SESSION['success_message'] = "Asset updated successfully.";
             } else {
                 // Insert new asset
-                $sql = "INSERT INTO assets (
-                            company_id, asset_name, asset_code, category_id, description,
-                            serial_number, purchase_date, purchase_cost, current_value,
-                            supplier, warranty_expiry, location, department_id, assigned_to,
+                $sql = "INSERT INTO fixed_assets (
+                            company_id, asset_name, asset_number, category_id, description,
+                            serial_number, model_number, manufacturer,
+                            purchase_date, purchase_cost, installation_cost, total_cost,
+                            supplier_id, invoice_number, warranty_expiry_date,
+                            location, department_id, custodian_id,
+                            account_code, depreciation_account_code, depreciation_method,
+                            useful_life_years, salvage_value, current_book_value,
                             status, notes, created_by
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 $stmt = $conn->prepare($sql);
                 $stmt->execute([
-                    $company_id, $asset_name, $asset_code, $category_id, $description,
-                    $serial_number, $purchase_date, $purchase_cost, $current_value,
-                    $supplier, $warranty_expiry, $location, $department_id, $assigned_to,
+                    $company_id, $asset_name, $asset_number, $category_id, $description,
+                    $serial_number, $model_number, $manufacturer,
+                    $purchase_date, $purchase_cost, $installation_cost, $total_cost,
+                    $supplier_id, $invoice_number, $warranty_expiry_date,
+                    $location, $department_id, $custodian_id,
+                    $account_code, $depreciation_account_code, $depreciation_method,
+                    $useful_life_years, $salvage_value, $current_book_value,
                     $status, $notes, $user_id
                 ]);
                 $new_id = $conn->lastInsertId();
                 
-                logAudit($conn, $company_id, $user_id, 'create', 'assets', 'assets', $new_id, 
-                         null, ['asset_name' => $asset_name, 'asset_code' => $asset_code]);
+                logAudit($conn, $company_id, $user_id, 'create', 'assets', 'fixed_assets', $new_id, 
+                         null, ['asset_name' => $asset_name, 'asset_number' => $asset_number]);
                 
                 $_SESSION['success_message'] = "Asset registered successfully.";
             }
@@ -234,9 +265,9 @@ require_once '../../includes/header.php';
                                                placeholder="e.g., Dell Laptop, Office Desk">
                                     </div>
                                     <div class="col-md-6 mb-3">
-                                        <label class="form-label">Asset Code <span class="text-danger">*</span></label>
+                                        <label class="form-label">Asset Number <span class="text-danger">*</span></label>
                                         <input type="text" name="asset_code" class="form-control" required
-                                               value="<?php echo htmlspecialchars($asset['asset_code'] ?? ''); ?>"
+                                               value="<?php echo htmlspecialchars($asset['asset_number'] ?? ''); ?>"
                                                placeholder="e.g., IT-LAP-001">
                                     </div>
                                 </div>
@@ -247,7 +278,8 @@ require_once '../../includes/header.php';
                                             <option value="">-- Select Category --</option>
                                             <?php foreach ($categories as $cat): ?>
                                             <option value="<?php echo $cat['category_id']; ?>" 
-                                                    data-rate="<?php echo $cat['depreciation_rate']; ?>"
+                                                    data-useful-life="<?php echo $cat['useful_life_years'] ?? 5; ?>"
+                                                    data-salvage="<?php echo $cat['salvage_value_percentage'] ?? 10; ?>"
                                                     <?php echo ($asset['category_id'] ?? '') == $cat['category_id'] ? 'selected' : ''; ?>>
                                                 <?php echo htmlspecialchars($cat['category_name']); ?>
                                             </option>
@@ -288,21 +320,21 @@ require_once '../../includes/header.php';
                                         <label class="form-label">Current Value (TZS)</label>
                                         <input type="number" name="current_value" class="form-control"
                                                min="0" step="0.01"
-                                               value="<?php echo $asset['current_value'] ?? ''; ?>"
+                                               value="<?php echo $asset['current_book_value'] ?? ''; ?>"
                                                placeholder="Leave blank to use purchase cost">
                                     </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Supplier/Vendor</label>
-                                        <input type="text" name="supplier" class="form-control"
-                                               value="<?php echo htmlspecialchars($asset['supplier'] ?? ''); ?>"
-                                               placeholder="Supplier name">
+                                        <input type="text" name="supplier_id" class="form-control"
+                                               value="<?php echo htmlspecialchars($asset['supplier_id'] ?? ''); ?>"
+                                               placeholder="Supplier ID (optional)">
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Warranty Expiry</label>
                                         <input type="date" name="warranty_expiry" class="form-control"
-                                               value="<?php echo $asset['warranty_expiry'] ?? ''; ?>">
+                                               value="<?php echo $asset['warranty_expiry_date'] ?? ''; ?>">
                                     </div>
                                 </div>
                             </div>
@@ -337,8 +369,8 @@ require_once '../../includes/header.php';
                                             <option value="">-- Select Employee --</option>
                                             <?php foreach ($employees as $emp): ?>
                                             <option value="<?php echo $emp['employee_id']; ?>"
-                                                    <?php echo ($asset['assigned_to'] ?? '') == $emp['employee_id'] ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']); ?>
+                                                    <?php echo ($asset['custodian_id'] ?? '') == $emp['employee_id'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($emp['full_name']); ?>
                                                 (<?php echo $emp['employee_number']; ?>)
                                             </option>
                                             <?php endforeach; ?>
@@ -347,10 +379,11 @@ require_once '../../includes/header.php';
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Status</label>
                                         <select name="status" class="form-select">
-                                            <option value="ACTIVE" <?php echo ($asset['status'] ?? 'ACTIVE') === 'ACTIVE' ? 'selected' : ''; ?>>Active</option>
-                                            <option value="MAINTENANCE" <?php echo ($asset['status'] ?? '') === 'MAINTENANCE' ? 'selected' : ''; ?>>Under Maintenance</option>
-                                            <option value="DISPOSED" <?php echo ($asset['status'] ?? '') === 'DISPOSED' ? 'selected' : ''; ?>>Disposed</option>
-                                            <option value="LOST" <?php echo ($asset['status'] ?? '') === 'LOST' ? 'selected' : ''; ?>>Lost</option>
+                                            <option value="active" <?php echo ($asset['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>Active</option>
+                                            <option value="under_maintenance" <?php echo ($asset['status'] ?? '') === 'under_maintenance' ? 'selected' : ''; ?>>Under Maintenance</option>
+                                            <option value="disposed" <?php echo ($asset['status'] ?? '') === 'disposed' ? 'selected' : ''; ?>>Disposed</option>
+                                            <option value="stolen" <?php echo ($asset['status'] ?? '') === 'stolen' ? 'selected' : ''; ?>>Stolen</option>
+                                            <option value="damaged" <?php echo ($asset['status'] ?? '') === 'damaged' ? 'selected' : ''; ?>>Damaged</option>
                                         </select>
                                     </div>
                                 </div>
@@ -378,7 +411,7 @@ require_once '../../includes/header.php';
                             <h6><i class="fas fa-eye me-2"></i>Preview</h6>
                             <hr style="border-color: rgba(255,255,255,0.3);">
                             <p class="mb-2"><strong id="previewName">Asset Name</strong></p>
-                            <p class="mb-2"><code id="previewCode">Asset Code</code></p>
+                            <p class="mb-2"><code id="previewCode">Asset Number</code></p>
                             <p class="mb-0"><small>Value: <span id="previewValue">TZS 0</span></small></p>
                         </div>
 
@@ -426,20 +459,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function updatePreview() {
         document.getElementById('previewName').textContent = assetName.value || 'Asset Name';
-        document.getElementById('previewCode').textContent = assetCode.value || 'Asset Code';
+        document.getElementById('previewCode').textContent = assetCode.value || 'Asset Number';
         document.getElementById('previewValue').textContent = 'TZS ' + (parseFloat(purchaseCost.value) || 0).toLocaleString();
     }
     
     function updateDepreciation() {
         const selected = categorySelect.options[categorySelect.selectedIndex];
-        const rate = parseFloat(selected.dataset.rate) || 0;
+        const usefulLife = parseFloat(selected.dataset.usefulLife) || 5;
+        const salvagePercent = parseFloat(selected.dataset.salvage) || 10;
         const cost = parseFloat(purchaseCost.value) || 0;
+        const salvageValue = cost * (salvagePercent / 100);
+        const depreciableCost = cost - salvageValue;
+        const annualRate = usefulLife > 0 ? (100 / usefulLife) : 0;
+        const monthlyDep = usefulLife > 0 ? (depreciableCost / (usefulLife * 12)) : 0;
+        const yearlyDep = monthlyDep * 12;
         
-        if (rate > 0 && cost > 0) {
+        if (annualRate > 0 && cost > 0) {
             document.getElementById('depreciationInfo').style.display = 'block';
-            document.getElementById('depRate').textContent = rate;
-            document.getElementById('depYearly').textContent = 'TZS ' + Math.round(cost * rate / 100).toLocaleString();
-            document.getElementById('depMonthly').textContent = 'TZS ' + Math.round(cost * rate / 100 / 12).toLocaleString();
+            document.getElementById('depRate').textContent = annualRate.toFixed(2) + '%';
+            document.getElementById('depYearly').textContent = 'TZS ' + Math.round(yearlyDep).toLocaleString();
+            document.getElementById('depMonthly').textContent = 'TZS ' + Math.round(monthlyDep).toLocaleString();
         } else {
             document.getElementById('depreciationInfo').style.display = 'none';
         }

@@ -1,18 +1,20 @@
 <?php
+define('APP_ACCESS', true);
 session_start();
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-defined('APP_ACCESS') or die('Direct access not permitted');
+$auth = new Auth();
+$auth->requireLogin();
 
-// Require authentication
-Auth::requireLogin();
+$db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
+$conn = $db->getConnection();
+$company_id = $_SESSION['company_id'];
 
 $page_title = "Payroll History";
-include '../../includes/header.php';
-
-$company_id = $_SESSION['company_id'];
+require_once '../../includes/header.php';
 
 // Get filter parameters
 $filter_status = isset($_GET['status']) ? $_GET['status'] : '';
@@ -21,7 +23,7 @@ $filter_year = isset($_GET['year']) ? intval($_GET['year']) : '';
 
 // Build query
 $query = "SELECT p.*, COUNT(pd.payroll_detail_id) as employee_count, 
-                 SUM(pd.net_pay) as total_net_pay,
+                 SUM(pd.net_salary) as total_net_pay,
                  u.full_name as processed_by
           FROM payroll p
           LEFT JOIN payroll_details pd ON p.payroll_id = pd.payroll_id
@@ -48,33 +50,26 @@ if ($filter_year) {
 $query .= " GROUP BY p.payroll_id ORDER BY p.payroll_year DESC, p.payroll_month DESC";
 
 $stmt = $conn->prepare($query);
-$types = str_repeat('i', count($params));
-if (count($params) > 1) {
-    $stmt->bind_param($types, ...$params);
-} else {
-    $stmt->bind_param($types, $params[0]);
-}
-$stmt->execute();
-$payrolls = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->execute($params);
+$payrolls = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get employees for filter
-$emp_query = "SELECT DISTINCT e.employee_id, e.full_name 
+$emp_query = "SELECT DISTINCT e.employee_id, u.full_name 
               FROM employees e
+              JOIN users u ON e.user_id = u.user_id
               JOIN payroll_details pd ON e.employee_id = pd.employee_id
               WHERE e.company_id = ?
-              ORDER BY e.full_name";
+              ORDER BY u.full_name";
 
 $emp_stmt = $conn->prepare($emp_query);
-$emp_stmt->bind_param('i', $company_id);
-$emp_stmt->execute();
-$employees = $emp_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$emp_stmt->execute([$company_id]);
+$employees = $emp_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get years for filter
 $year_query = "SELECT DISTINCT payroll_year FROM payroll WHERE company_id = ? ORDER BY payroll_year DESC";
 $year_stmt = $conn->prepare($year_query);
-$year_stmt->bind_param('i', $company_id);
-$year_stmt->execute();
-$years = $year_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$year_stmt->execute([$company_id]);
+$years = $year_stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="container-fluid mt-4">
@@ -92,8 +87,7 @@ $years = $year_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
                     <select name="status" class="form-select">
                         <option value="">All Status</option>
                         <option value="draft" <?php echo $filter_status == 'draft' ? 'selected' : ''; ?>>Draft</option>
-                        <option value="processing" <?php echo $filter_status == 'processing' ? 'selected' : ''; ?>>Processing</option>
-                        <option value="completed" <?php echo $filter_status == 'completed' ? 'selected' : ''; ?>>Completed</option>
+                        <option value="processed" <?php echo $filter_status == 'processed' ? 'selected' : ''; ?>>Processed</option>
                         <option value="paid" <?php echo $filter_status == 'paid' ? 'selected' : ''; ?>>Paid</option>
                     </select>
                 </div>
@@ -153,8 +147,7 @@ $years = $year_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
                                 <td>
                                     <span class="badge bg-<?php 
                                         echo $pr['status'] == 'paid' ? 'success' : 
-                                             ($pr['status'] == 'completed' ? 'info' : 
-                                              ($pr['status'] == 'processing' ? 'warning' : 'secondary'));
+                                             ($pr['status'] == 'processed' ? 'info' : 'secondary');
                                     ?>">
                                         <?php echo ucfirst($pr['status']); ?>
                                     </span>
@@ -179,4 +172,4 @@ $years = $year_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<?php include '../../includes/footer.php'; ?>
+<?php require_once '../../includes/footer.php'; ?>

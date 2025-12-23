@@ -32,12 +32,13 @@ $department_filter = $_GET['department'] ?? '';
 $loan_type_filter = $_GET['loan_type'] ?? '';
 
 // Build query
-$sql = "SELECT el.*, lt.type_name as loan_type_name, e.first_name, e.last_name, e.employee_number,
+$sql = "SELECT el.*, lt.type_name as loan_type_name, u.full_name as employee_name, e.employee_number,
                e.basic_salary, d.department_name,
-               (SELECT CONCAT(u.first_name, ' ', u.last_name) FROM users u WHERE u.id = el.approved_by) as approver_name
+               (SELECT u2.full_name FROM users u2 WHERE u2.user_id = el.approved_by) as approver_name
         FROM employee_loans el
         JOIN loan_types lt ON el.loan_type_id = lt.loan_type_id
         JOIN employees e ON el.employee_id = e.employee_id
+        JOIN users u ON e.user_id = u.user_id
         LEFT JOIN departments d ON e.department_id = d.department_id
         WHERE el.company_id = ?";
 $params = [$company_id];
@@ -61,8 +62,13 @@ $stmt->execute($params);
 $loans = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get departments and loan types for filters
-$departments = $conn->query("SELECT department_id, department_name FROM departments WHERE company_id = $company_id ORDER BY department_name")->fetchAll(PDO::FETCH_ASSOC);
-$loan_types = $conn->query("SELECT loan_type_id, type_name as loan_type_name FROM loan_types WHERE company_id = $company_id ORDER BY type_name")->fetchAll(PDO::FETCH_ASSOC);
+$dept_stmt = $conn->prepare("SELECT department_id, department_name FROM departments WHERE company_id = ? ORDER BY department_name");
+$dept_stmt->execute([$company_id]);
+$departments = $dept_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$loan_types_stmt = $conn->prepare("SELECT loan_type_id, type_name as loan_type_name FROM loan_types WHERE company_id = ? ORDER BY type_name");
+$loan_types_stmt->execute([$company_id]);
+$loan_types = $loan_types_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Count by status
 $counts = [];
@@ -248,10 +254,10 @@ require_once '../../includes/header.php';
                             <?php foreach ($loans as $loan): ?>
                             <tr>
                                 <td>
-                                    <strong><?php echo htmlspecialchars($loan['loan_reference']); ?></strong>
+                                    <strong><?php echo htmlspecialchars($loan['loan_number']); ?></strong>
                                 </td>
                                 <td>
-                                    <strong><?php echo htmlspecialchars($loan['first_name'] . ' ' . $loan['last_name']); ?></strong>
+                                    <strong><?php echo htmlspecialchars($loan['employee_name']); ?></strong>
                                     <small class="d-block text-muted">
                                         <?php echo htmlspecialchars($loan['employee_number']); ?> | 
                                         <?php echo htmlspecialchars($loan['department_name'] ?? 'N/A'); ?>
@@ -259,10 +265,10 @@ require_once '../../includes/header.php';
                                 </td>
                                 <td><?php echo htmlspecialchars($loan['loan_type_name']); ?></td>
                                 <td class="loan-amount"><?php echo formatCurrency($loan['loan_amount']); ?></td>
-                                <td><?php echo $loan['loan_term_months']; ?> months</td>
-                                <td><?php echo formatCurrency($loan['monthly_installment']); ?></td>
+                                <td><?php echo $loan['repayment_period_months']; ?> months</td>
+                                <td><?php echo formatCurrency($loan['monthly_deduction']); ?></td>
                                 <td>
-                                    <?php echo date('M d, Y', strtotime($loan['applied_at'] ?? $loan['created_at'])); ?>
+                                    <?php echo date('M d, Y', strtotime($loan['application_date'] ?? $loan['created_at'])); ?>
                                 </td>
                                 <td><?php echo getStatusBadge($loan['status']); ?></td>
                                 <td class="action-buttons">
@@ -272,19 +278,19 @@ require_once '../../includes/header.php';
                                     <?php if ($loan['status'] === 'PENDING'): ?>
                                     <button type="button" class="btn btn-sm btn-success approve-btn" 
                                             data-id="<?php echo $loan['loan_id']; ?>"
-                                            data-name="<?php echo htmlspecialchars($loan['first_name'] . ' ' . $loan['last_name']); ?>"
+                                            data-name="<?php echo htmlspecialchars($loan['employee_name']); ?>"
                                             data-amount="<?php echo formatCurrency($loan['loan_amount']); ?>">
                                         <i class="fas fa-check"></i>
                                     </button>
                                     <button type="button" class="btn btn-sm btn-danger reject-btn"
                                             data-id="<?php echo $loan['loan_id']; ?>"
-                                            data-name="<?php echo htmlspecialchars($loan['first_name'] . ' ' . $loan['last_name']); ?>">
+                                            data-name="<?php echo htmlspecialchars($loan['employee_name']); ?>">
                                         <i class="fas fa-times"></i>
                                     </button>
                                     <?php elseif ($loan['status'] === 'APPROVED'): ?>
                                     <button type="button" class="btn btn-sm btn-info disburse-btn"
                                             data-id="<?php echo $loan['loan_id']; ?>"
-                                            data-name="<?php echo htmlspecialchars($loan['first_name'] . ' ' . $loan['last_name']); ?>"
+                                            data-name="<?php echo htmlspecialchars($loan['employee_name']); ?>"
                                             data-amount="<?php echo formatCurrency($loan['loan_amount']); ?>">
                                         <i class="fas fa-money-bill-wave"></i> Disburse
                                     </button>

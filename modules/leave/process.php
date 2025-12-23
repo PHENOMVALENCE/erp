@@ -46,7 +46,8 @@ if (!$leave) {
 }
 
 // Check permissions
-$is_owner = (getEmployeeByUserId($conn, $user_id)['employee_id'] ?? 0) == $leave['employee_id'];
+$employee_data = getEmployeeByUserId($conn, $user_id, $company_id);
+$is_owner = ($employee_data['employee_id'] ?? 0) == $leave['employee_id'];
 $is_manager = hasPermission($conn, $user_id, ['MANAGER', 'HR_OFFICER', 'COMPANY_ADMIN', 'SUPER_ADMIN']);
 
 // Validate action permissions

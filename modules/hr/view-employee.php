@@ -64,12 +64,15 @@ $recent_payrolls = [];
 try {
     $payroll_query = "
         SELECT 
-            payroll_month, basic_salary, allowances, total_salary, 
-            payment_date, status
-        FROM payroll 
-        WHERE employee_id = ? 
-        AND payroll_month >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-        ORDER BY payroll_month DESC
+            p.payroll_month, p.payroll_year, pd.basic_salary, pd.allowances, pd.gross_salary as total_salary, 
+            p.payment_date, p.status
+        FROM payroll p
+        INNER JOIN payroll_details pd ON p.payroll_id = pd.payroll_id
+        WHERE pd.employee_id = ? 
+        AND (p.payroll_year > YEAR(DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) 
+             OR (p.payroll_year = YEAR(DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) 
+                 AND p.payroll_month >= MONTH(DATE_SUB(CURDATE(), INTERVAL 3 MONTH))))
+        ORDER BY p.payroll_year DESC, p.payroll_month DESC
     ";
     $stmt = $conn->prepare($payroll_query);
     $stmt->execute([$employee_id]);

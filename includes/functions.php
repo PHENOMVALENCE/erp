@@ -101,16 +101,27 @@ function hasPermission($conn, $user_id, $required_roles) {
 
 /**
  * Get employee details by user ID
+ * @param PDO $conn Database connection
+ * @param int $user_id User ID
+ * @param int|null $company_id Optional company ID for multi-tenant security
+ * @return array|false Employee data or false if not found
  */
-function getEmployeeByUserId($conn, $user_id) {
+function getEmployeeByUserId($conn, $user_id, $company_id = null) {
     $sql = "SELECT e.*, u.full_name, u.email, u.phone1, d.department_name, p.position_title
             FROM employees e
             JOIN users u ON e.user_id = u.user_id
             LEFT JOIN departments d ON e.department_id = d.department_id
             LEFT JOIN positions p ON e.position_id = p.position_id
             WHERE e.user_id = ? AND e.is_active = 1";
+    $params = [$user_id];
+    
+    if ($company_id !== null) {
+        $sql .= " AND e.company_id = ?";
+        $params[] = $company_id;
+    }
+    
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$user_id]);
+    $stmt->execute($params);
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 

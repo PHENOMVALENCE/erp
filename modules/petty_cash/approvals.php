@@ -30,14 +30,15 @@ $status_filter = $_GET['status'] ?? 'pending';
 
 // Get transactions
 $sql = "SELECT pct.*, pca.account_name, pca.current_balance,
-               CONCAT(e.first_name, ' ', IFNULL(CONCAT(e.middle_name, ' '), ''), e.last_name) as requester_name, 
+               u.full_name as requester_name, 
                e.employee_number,
                d.department_name,
-               (SELECT CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) 
-                FROM users u WHERE u.user_id = pct.approved_by) as approver_name
+               (SELECT u2.full_name 
+                FROM users u2 WHERE u2.user_id = pct.approved_by) as approver_name
         FROM petty_cash_transactions pct
         JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
-        JOIN employees e ON pct.created_by = e.employee_id
+        LEFT JOIN users u ON pct.created_by = u.user_id
+        LEFT JOIN employees e ON u.user_id = e.user_id
         LEFT JOIN departments d ON e.department_id = d.department_id
         WHERE pca.company_id = ? AND pct.transaction_type = 'disbursement'";
 $params = [$company_id];
@@ -54,11 +55,11 @@ $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Count by status
 $counts = [];
-$count_sql = "SELECT status, COUNT(*) as count 
+$count_sql = "SELECT pct.status, COUNT(*) as count 
               FROM petty_cash_transactions pct
               JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
               WHERE pca.company_id = ? AND pct.transaction_type = 'disbursement'
-              GROUP BY status";
+              GROUP BY pct.status";
 $stmt = $conn->prepare($count_sql);
 $stmt->execute([$company_id]);
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {

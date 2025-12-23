@@ -168,8 +168,8 @@ class Auth
     {
         $sql = "SELECT COUNT(*) as attempts 
                 FROM login_attempts 
-                WHERE username = :username AND success = 0 
-                  AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)";
+                WHERE username = :username AND is_successful = 0 
+                  AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)";
 
         $stmt = $this->db->query($sql, ['username' => $username]);
         $row = $stmt ? $stmt->fetch() : null;
@@ -180,7 +180,7 @@ class Auth
     private function recordLoginAttempt(string $username, bool $success): void
     {
         $this->db->query(
-            "INSERT INTO login_attempts (username, ip_address, user_agent, success, attempt_time) 
+            "INSERT INTO login_attempts (username, ip_address, user_agent, is_successful, attempted_at) 
              VALUES (:username, :ip, :agent, :success, NOW())",
             [
                 'username' => $username,

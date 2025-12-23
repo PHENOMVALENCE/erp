@@ -1,46 +1,49 @@
 <?php
+define('APP_ACCESS', true);
 session_start();
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-defined('APP_ACCESS') or die('Direct access not permitted');
+$auth = new Auth();
+$auth->requireLogin();
 
-// Require authentication
-Auth::requireLogin();
-
-$page_title = "Expense Approvals";
-include '../../includes/header.php';
-
+$db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
+$conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
 
+$page_title = "Expense Approvals";
+require_once '../../includes/header.php';
+
 // Get filter parameters
-$filter_status = isset($_GET['status']) ? $_GET['status'] : 'pending';
+$filter_status = isset($_GET['status']) ? $_GET['status'] : 'pending_approval';
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
-// Build query
-$query = "SELECT e.*, u.full_name as requested_by, u2.full_name as created_by_name
-          FROM expenses e
-          LEFT JOIN users u ON e.employee_id = u.user_id
-          LEFT JOIN users u2 ON e.created_by = u2.user_id
-          WHERE e.company_id = ? AND e.status = ?";
+// Build query - using direct_expenses table
+$query = "SELECT de.*, u.full_name as created_by_name, u2.full_name as approver_name,
+                 ec.category_name
+          FROM direct_expenses de
+          LEFT JOIN users u ON de.created_by = u.user_id
+          LEFT JOIN users u2 ON de.approved_by = u2.user_id
+          LEFT JOIN expense_categories ec ON de.category_id = ec.category_id
+          WHERE de.company_id = ? AND de.status = ?";
 
 $params = [$company_id, $filter_status];
 
 if ($search) {
-    $query .= " AND (e.description LIKE ? OR e.reference_number LIKE ?)";
-    $params[] = "%{$search}%";
-    $params[] = "%{$search}%";
+    $query .= " AND (de.description LIKE ? OR de.expense_number LIKE ?)";
+    $search_param = "%{$search}%";
+    $params[] = $search_param;
+    $params[] = $search_param;
 }
 
-$query .= " ORDER BY e.created_at DESC";
+$query .= " ORDER BY de.created_at DESC";
 
 $stmt = $conn->prepare($query);
-$stmt->bind_param(str_repeat('s', count($params)), ...$params);
-$stmt->execute();
-$result = $stmt->get_result();
-$expenses = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->execute($params);
+$expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle approval action
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
@@ -48,37 +51,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     
     if ($action == 'approve') {
-        $update_query = "UPDATE expenses SET status = 'approved', approved_by = ?, approved_at = NOW() WHERE expense_id = ? AND company_id = ?";
+        $update_query = "UPDATE direct_expenses SET status = 'approved', approved_by = ?, approved_at = NOW() WHERE expense_id = ? AND company_id = ?";
         $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param('iii', $user_id, $expense_id, $company_id);
-        $update_stmt->execute();
+        $update_stmt->execute([$user_id, $expense_id, $company_id]);
         
-        logActivity($conn, $company_id, $user_id, 'APPROVED', 'expenses', 'expenses', $expense_id);
+        if (function_exists('logActivity')) {
+            logActivity($conn, $company_id, $user_id, 'APPROVED', 'expenses', 'direct_expenses', $expense_id);
+        }
         echo '<div class="alert alert-success">Expense approved successfully.</div>';
     } elseif ($action == 'reject') {
         $reason = $_POST['rejection_reason'] ?? '';
-        $update_query = "UPDATE expenses SET status = 'rejected', rejection_reason = ?, approved_by = ?, approved_at = NOW() WHERE expense_id = ? AND company_id = ?";
+        $update_query = "UPDATE direct_expenses SET status = 'rejected', notes = ?, approved_by = ?, approved_at = NOW() WHERE expense_id = ? AND company_id = ?";
         $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param('siii', $reason, $user_id, $expense_id, $company_id);
-        $update_stmt->execute();
+        $update_stmt->execute([$reason, $user_id, $expense_id, $company_id]);
         
-        logActivity($conn, $company_id, $user_id, 'REJECTED', 'expenses', 'expenses', $expense_id);
+        if (function_exists('logActivity')) {
+            logActivity($conn, $company_id, $user_id, 'REJECTED', 'expenses', 'direct_expenses', $expense_id);
+        }
         echo '<div class="alert alert-info">Expense rejected successfully.</div>';
     }
 }
 
 // Get status counts
 $counts_query = "SELECT 
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN status = 'pending_approval' THEN 1 ELSE 0 END) as pending,
                 SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
                 SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
-                FROM expenses 
+                FROM direct_expenses 
                 WHERE company_id = ?";
 
 $counts_stmt = $conn->prepare($counts_query);
-$counts_stmt->bind_param('i', $company_id);
-$counts_stmt->execute();
-$counts = $counts_stmt->get_result()->fetch_assoc();
+$counts_stmt->execute([$company_id]);
+$counts = $counts_stmt->fetch(PDO::FETCH_ASSOC);
 ?>
 
 <div class="container-fluid mt-4">

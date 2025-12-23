@@ -19,11 +19,11 @@ $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
 
-$employee = getEmployeeByUserId($conn, $user_id);
+$employee = getEmployeeByUserId($conn, $user_id, $company_id);
 
 if (!$employee) {
-    $_SESSION['error_message'] = "Employee record not found.";
-    header('Location: ../../dashboard.php');
+    $_SESSION['error_message'] = "Employee record not found. Please contact HR to set up your employee profile.";
+    header('Location: ../../index.php');
     exit;
 }
 
@@ -151,7 +151,7 @@ require_once '../../includes/header.php';
                 </div>
                 <div class="col-sm-6">
                     <ol class="breadcrumb float-sm-end">
-                        <li class="breadcrumb-item"><a href="../../dashboard.php">Home</a></li>
+                        <li class="breadcrumb-item"><a href="../../index.php">Home</a></li>
                         <li class="breadcrumb-item"><a href="index.php">Leave</a></li>
                         <li class="breadcrumb-item active">My History</li>
                     </ol>

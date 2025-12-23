@@ -34,15 +34,16 @@ $year = substr($month, 0, 4);
 $month_num = substr($month, 5, 2);
 
 // Get payroll data
-$sql = "SELECT p.*, e.first_name, e.last_name, e.employee_number, d.department_name,
+$sql = "SELECT p.*, u.full_name, e.employee_number, d.department_name,
                pd.basic_salary, pd.allowances, pd.overtime_pay, pd.bonus, pd.gross_salary,
-               pd.tax_amount, pd.nssf_employee, pd.nhif_amount, pd.loan_deduction, 
+               pd.tax_amount, pd.nssf_amount, pd.nhif_amount, pd.loan_deduction, 
                pd.other_deductions, pd.total_deductions, pd.net_salary
         FROM payroll p
-        JOIN employees e ON p.employee_id = e.employee_id
+        JOIN payroll_details pd ON p.payroll_id = pd.payroll_id
+        JOIN employees e ON pd.employee_id = e.employee_id
+        JOIN users u ON e.user_id = u.user_id
         LEFT JOIN departments d ON e.department_id = d.department_id
-        LEFT JOIN payroll_details pd ON p.payroll_id = pd.payroll_id
-        WHERE p.company_id = ? AND YEAR(p.pay_period_start) = ? AND MONTH(p.pay_period_start) = ?";
+        WHERE p.company_id = ? AND p.payroll_year = ? AND p.payroll_month = ?";
 $params = [$company_id, $year, $month_num];
 
 if ($department_filter) {
@@ -50,7 +51,7 @@ if ($department_filter) {
     $params[] = $department_filter;
 }
 
-$sql .= " ORDER BY d.department_name, e.first_name";
+$sql .= " ORDER BY d.department_name, u.full_name";
 $stmt = $conn->prepare($sql);
 $stmt->execute($params);
 $payroll_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -58,7 +59,7 @@ $payroll_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Calculate totals
 $totals = [
     'basic_salary' => 0, 'allowances' => 0, 'overtime_pay' => 0, 'bonus' => 0, 'gross_salary' => 0,
-    'tax_amount' => 0, 'nssf_employee' => 0, 'nhif_amount' => 0, 'loan_deduction' => 0,
+    'tax_amount' => 0, 'nssf_amount' => 0, 'nhif_amount' => 0, 'loan_deduction' => 0,
     'other_deductions' => 0, 'total_deductions' => 0, 'net_salary' => 0
 ];
 foreach ($payroll_data as $p) {
@@ -68,7 +69,9 @@ foreach ($payroll_data as $p) {
 }
 
 // Get departments for filter
-$departments = $conn->query("SELECT department_id, department_name FROM departments WHERE company_id = $company_id ORDER BY department_name")->fetchAll(PDO::FETCH_ASSOC);
+$dept_stmt = $conn->prepare("SELECT department_id, department_name FROM departments WHERE company_id = ? ORDER BY department_name");
+$dept_stmt->execute([$company_id]);
+$departments = $dept_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title = "Payroll Summary Report";
 require_once '../../includes/header.php';
@@ -247,7 +250,7 @@ require_once '../../includes/header.php';
                             <tr>
                                 <td><?php echo $i++; ?></td>
                                 <td>
-                                    <?php echo htmlspecialchars($p['first_name'] . ' ' . $p['last_name']); ?>
+                                    <?php echo htmlspecialchars($p['full_name']); ?>
                                     <br><small class="text-muted"><?php echo htmlspecialchars($p['employee_number']); ?></small>
                                 </td>
                                 <td><?php echo htmlspecialchars($p['department_name'] ?? 'N/A'); ?></td>
@@ -256,7 +259,7 @@ require_once '../../includes/header.php';
                                 <td class="text-end"><?php echo number_format($p['overtime_pay'] ?? 0); ?></td>
                                 <td class="text-end"><strong><?php echo number_format($p['gross_salary'] ?? 0); ?></strong></td>
                                 <td class="text-end text-danger"><?php echo number_format($p['tax_amount'] ?? 0); ?></td>
-                                <td class="text-end text-danger"><?php echo number_format($p['nssf_employee'] ?? 0); ?></td>
+                                <td class="text-end text-danger"><?php echo number_format($p['nssf_amount'] ?? 0); ?></td>
                                 <td class="text-end text-danger"><?php echo number_format($p['nhif_amount'] ?? 0); ?></td>
                                 <td class="text-end text-danger"><?php echo number_format($p['loan_deduction'] ?? 0); ?></td>
                                 <td class="text-end"><strong><?php echo number_format($p['net_salary'] ?? 0); ?></strong></td>
@@ -272,7 +275,7 @@ require_once '../../includes/header.php';
                                 <td class="text-end"><?php echo number_format($totals['overtime_pay']); ?></td>
                                 <td class="text-end"><?php echo number_format($totals['gross_salary']); ?></td>
                                 <td class="text-end"><?php echo number_format($totals['tax_amount']); ?></td>
-                                <td class="text-end"><?php echo number_format($totals['nssf_employee']); ?></td>
+                                <td class="text-end"><?php echo number_format($totals['nssf_amount']); ?></td>
                                 <td class="text-end"><?php echo number_format($totals['nhif_amount']); ?></td>
                                 <td class="text-end"><?php echo number_format($totals['loan_deduction']); ?></td>
                                 <td class="text-end"><?php echo number_format($totals['net_salary']); ?></td>
@@ -305,7 +308,7 @@ require_once '../../includes/header.php';
                                 </tr>
                                 <tr class="table-dark">
                                     <td>Total Statutory</td>
-                                    <td class="text-end"><strong><?php echo formatCurrency($totals['tax_amount'] + $totals['nssf_employee'] + $totals['nhif_amount']); ?></strong></td>
+                                    <td class="text-end"><strong><?php echo formatCurrency($totals['tax_amount'] + $totals['nssf_amount'] + $totals['nhif_amount']); ?></strong></td>
                                 </tr>
                             </table>
                         </div>

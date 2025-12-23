@@ -62,12 +62,13 @@ if ($employee) {
 $pending_approvals = [];
 if ($is_hr) {
     try {
-        $stmt = $conn->prepare("SELECT la.*, lt.leave_type_name, e.full_name as employee_name, d.department_name
+        $stmt = $conn->prepare("SELECT la.*, lt.leave_type_name, u.full_name as employee_name, d.department_name
             FROM leave_applications la
             JOIN leave_types lt ON la.leave_type_id = lt.leave_type_id
             JOIN employees e ON la.employee_id = e.employee_id
+            JOIN users u ON e.user_id = u.user_id
             LEFT JOIN departments d ON e.department_id = d.department_id
-            WHERE la.company_id = ? AND la.status = 'PENDING'
+            WHERE la.company_id = ? AND la.status = 'pending'
             ORDER BY la.created_at ASC LIMIT 10");
         $stmt->execute([$company_id]);
         $pending_approvals = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -179,7 +180,7 @@ require_once '../../includes/header.php';
                                 <td><?= htmlspecialchars($leave['leave_type_name']) ?></td>
                                 <td><?= date('M d, Y', strtotime($leave['start_date'])) ?></td>
                                 <td><?= date('M d, Y', strtotime($leave['end_date'])) ?></td>
-                                <td><?= $leave['days_requested'] ?></td>
+                                <td><?= $leave['total_days'] ?></td>
                                 <td><span class="status-badge <?= strtolower($leave['status']) ?>"><?= ucfirst(strtolower($leave['status'])) ?></span></td>
                             </tr>
                             <?php endforeach; ?>
@@ -202,7 +203,7 @@ require_once '../../includes/header.php';
                             <tr>
                                 <td><?= htmlspecialchars($app['employee_name']) ?><br><small class="text-muted"><?= htmlspecialchars($app['department_name'] ?? '') ?></small></td>
                                 <td><?= htmlspecialchars($app['leave_type_name']) ?></td>
-                                <td><?= $app['days_requested'] ?></td>
+                                <td><?= $app['total_days'] ?></td>
                                 <td><a href="approvals.php?id=<?= $app['leave_id'] ?>" class="btn btn-sm btn-primary">Review</a></td>
                             </tr>
                             <?php endforeach; ?>

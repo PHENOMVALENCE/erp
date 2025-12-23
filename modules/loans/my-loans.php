@@ -33,7 +33,7 @@ $year_filter = $_GET['year'] ?? date('Y');
 // Get all loans for this employee
 $sql = "SELECT el.*, lt.type_name as loan_type_name, lt.interest_rate,
                (SELECT COUNT(*) FROM loan_payments lp WHERE lp.loan_id = el.loan_id) as payments_count,
-               (SELECT SUM(amount_paid) FROM loan_payments lp WHERE lp.loan_id = el.loan_id) as total_paid
+               (SELECT SUM(total_paid) FROM loan_payments lp WHERE lp.loan_id = el.loan_id) as total_paid
         FROM employee_loans el
         JOIN loan_types lt ON el.loan_type_id = lt.loan_type_id
         WHERE el.employee_id = ?";
@@ -235,7 +235,7 @@ require_once '../../includes/header.php';
                         <span class="loan-amount"><?php echo formatCurrency($loan['loan_amount']); ?></span>
                         <span class="text-muted ms-2"><?php echo htmlspecialchars($loan['loan_type_name']); ?></span>
                         <br>
-                        <small class="text-muted">Ref: <?php echo htmlspecialchars($loan['loan_reference']); ?></small>
+                        <small class="text-muted">Ref: <?php echo htmlspecialchars($loan['loan_number']); ?></small>
                     </div>
                     <div class="text-end">
                         <?php echo getStatusBadge($loan['status']); ?>
@@ -251,11 +251,11 @@ require_once '../../includes/header.php';
                     </div>
                     <div class="loan-detail">
                         <small>Term</small>
-                        <strong><?php echo $loan['loan_term_months']; ?> months</strong>
+                        <strong><?php echo $loan['repayment_period_months']; ?> months</strong>
                     </div>
                     <div class="loan-detail">
                         <small>Monthly Payment</small>
-                        <strong><?php echo formatCurrency($loan['monthly_installment']); ?></strong>
+                        <strong><?php echo formatCurrency($loan['monthly_deduction']); ?></strong>
                     </div>
                     <div class="loan-detail">
                         <small>Outstanding</small>

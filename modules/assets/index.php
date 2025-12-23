@@ -119,10 +119,9 @@ require_once '../../includes/header.php';
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3"><a href="add.php" class="action-card"><i class="fas fa-plus-circle"></i><h5>Add Asset</h5><p class="text-muted small mb-0">Register new asset</p></a></div>
-        <div class="col-md-3"><a href="list.php" class="action-card"><i class="fas fa-list"></i><h5>Asset Register</h5><p class="text-muted small mb-0">View all assets</p></a></div>
-        <div class="col-md-3"><a href="depreciation.php" class="action-card"><i class="fas fa-calculator"></i><h5>Depreciation</h5><p class="text-muted small mb-0">Calculate & record</p></a></div>
-        <div class="col-md-3"><a href="categories.php" class="action-card"><i class="fas fa-tags"></i><h5>Categories</h5><p class="text-muted small mb-0">Manage categories</p></a></div>
+        <div class="col-md-4"><a href="add.php" class="action-card"><i class="fas fa-plus-circle"></i><h5>Add Asset</h5><p class="text-muted small mb-0">Register new asset</p></a></div>
+        <div class="col-md-4"><a href="list.php" class="action-card"><i class="fas fa-list"></i><h5>Asset Register</h5><p class="text-muted small mb-0">View all assets</p></a></div>
+        <div class="col-md-4"><a href="depreciation.php" class="action-card"><i class="fas fa-calculator"></i><h5>Depreciation</h5><p class="text-muted small mb-0">Calculate & record</p></a></div>
     </div>
 
     <div class="row">

@@ -1,27 +1,27 @@
 <?php
+define('APP_ACCESS', true);
 session_start();
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 require_once '../../includes/functions.php';
 
-defined('APP_ACCESS') or die('Direct access not permitted');
+$auth = new Auth();
+$auth->requireLogin();
 
-// Require authentication
-Auth::requireLogin();
-
-$page_title = "Leave Balance";
-include '../../includes/header.php';
-
+$db = Database::getInstance();
+$db->setCompanyId($_SESSION['company_id']);
+$conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
+
+$page_title = "Leave Balance";
+require_once '../../includes/header.php';
 
 // Get current fiscal/leave year
 $settings_query = "SELECT setting_value FROM system_settings WHERE company_id = ? AND setting_key = 'leave_year_start'";
 $settings_stmt = $conn->prepare($settings_query);
-$settings_stmt->bind_param('i', $company_id);
-$settings_stmt->execute();
-$settings_result = $settings_stmt->get_result();
-$settings = $settings_result->fetch_assoc();
+$settings_stmt->execute([$company_id]);
+$settings = $settings_stmt->fetch(PDO::FETCH_ASSOC);
 
 $leave_year_start = isset($settings['setting_value']) ? intval($settings['setting_value']) : 1;
 $current_month = date('n');
@@ -38,18 +38,23 @@ if ($current_month >= $leave_year_start) {
 $filter_employee = isset($_GET['employee']) ? intval($_GET['employee']) : 0;
 $filter_department = isset($_GET['department']) ? intval($_GET['department']) : 0;
 
-// Get leave balances
-$query = "SELECT lb.*, lt.leave_type_name, lt.days_per_year, e.full_name, e.employee_number, d.department_name
-          FROM leave_balances lb
-          JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
-          JOIN employees e ON lb.employee_id = e.employee_id
+// Get leave balances - Note: leave_balances table may not exist, using leave_applications as fallback
+$query = "SELECT la.employee_id, lt.leave_type_name, lt.days_per_year, u.full_name, e.employee_number, d.department_name,
+                 COUNT(*) as used_days,
+                 lt.days_per_year as entitled_days,
+                 (lt.days_per_year - COUNT(*)) as balance
+          FROM leave_applications la
+          JOIN leave_types lt ON la.leave_type_id = lt.leave_type_id
+          JOIN employees e ON la.employee_id = e.employee_id
+          JOIN users u ON e.user_id = u.user_id
           LEFT JOIN departments d ON e.department_id = d.department_id
-          WHERE lb.company_id = ? AND lb.fiscal_year = ?";
+          WHERE la.company_id = ? AND YEAR(la.start_date) = ?
+          GROUP BY la.employee_id, la.leave_type_id";
 
 $params = [$company_id, $fiscal_year];
 
 if ($filter_employee) {
-    $query .= " AND lb.employee_id = ?";
+    $query .= " AND la.employee_id = ?";
     $params[] = $filter_employee;
 }
 
@@ -58,31 +63,27 @@ if ($filter_department) {
     $params[] = $filter_department;
 }
 
-$query .= " ORDER BY e.full_name, lt.leave_type_name";
+$query .= " ORDER BY u.full_name, lt.leave_type_name";
 
 $stmt = $conn->prepare($query);
-if (count($params) == 2) {
-    $stmt->bind_param('ii', $params[0], $params[1]);
-} else {
-    $types = 'ii' . str_repeat('i', count($params) - 2);
-    $stmt->bind_param($types, ...$params);
-}
-$stmt->execute();
-$balances = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->execute($params);
+$balances = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get employees for filter
-$emp_query = "SELECT employee_id, full_name, employee_number FROM employees WHERE company_id = ? AND is_active = 1 ORDER BY full_name";
+$emp_query = "SELECT e.employee_id, u.full_name, e.employee_number 
+              FROM employees e
+              JOIN users u ON e.user_id = u.user_id
+              WHERE e.company_id = ? AND e.is_active = 1 
+              ORDER BY u.full_name";
 $emp_stmt = $conn->prepare($emp_query);
-$emp_stmt->bind_param('i', $company_id);
-$emp_stmt->execute();
-$employees = $emp_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$emp_stmt->execute([$company_id]);
+$employees = $emp_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get departments for filter
 $dept_query = "SELECT department_id, department_name FROM departments WHERE company_id = ? AND is_active = 1 ORDER BY department_name";
 $dept_stmt = $conn->prepare($dept_query);
-$dept_stmt->bind_param('i', $company_id);
-$dept_stmt->execute();
-$departments = $dept_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$dept_stmt->execute([$company_id]);
+$departments = $dept_stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="container-fluid mt-4">

@@ -38,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $errors[] = "Item code already exists";
                     } else {
                         $sql = "INSERT INTO items (
-                            company_id, item_code, item_name, description, category,
-                            unit_of_measure, unit_cost, selling_price, reorder_level,
+                            company_id, item_code, item_name, description, category_id,
+                            unit_of_measure, cost_price, selling_price, reorder_level,
                             barcode, sku, is_active, created_by
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
                         
@@ -49,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $_POST['item_code'],
                             $_POST['item_name'],
                             $_POST['description'] ?? null,
-                            $_POST['category'] ?? null,
-                            $_POST['unit_of_measure'] ?? 'PCS',
+                            !empty($_POST['category_id']) ? intval($_POST['category_id']) : null,
+                            $_POST['unit_of_measure'] ?? 'pcs',
                             floatval($_POST['unit_cost'] ?? 0),
                             floatval($_POST['selling_price'] ?? 0),
                             floatval($_POST['reorder_level'] ?? 0),
@@ -82,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 } else {
                     $sql = "UPDATE items SET 
-                        item_code = ?, item_name = ?, description = ?, category = ?,
-                        unit_of_measure = ?, unit_cost = ?, selling_price = ?, reorder_level = ?,
+                        item_code = ?, item_name = ?, description = ?, category_id = ?,
+                        unit_of_measure = ?, cost_price = ?, selling_price = ?, reorder_level = ?,
                         barcode = ?, sku = ?, is_active = ?,
                         updated_at = NOW()
                         WHERE item_id = ? AND company_id = ?";
@@ -93,8 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_POST['item_code'],
                         $_POST['item_name'],
                         $_POST['description'] ?? null,
-                        $_POST['category'] ?? null,
-                        $_POST['unit_of_measure'] ?? 'PCS',
+                        !empty($_POST['category_id']) ? intval($_POST['category_id']) : null,
+                        $_POST['unit_of_measure'] ?? 'pcs',
                         floatval($_POST['unit_cost'] ?? 0),
                         floatval($_POST['selling_price'] ?? 0),
                         floatval($_POST['reorder_level'] ?? 0),
@@ -145,9 +145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $where_conditions = ["i.company_id = ?"];
 $params = [$company_id];
 
-if (!empty($_GET['category'])) {
-    $where_conditions[] = "i.category = ?";
-    $params[] = $_GET['category'];
+if (!empty($_GET['category_id'])) {
+    $where_conditions[] = "i.category_id = ?";
+    $params[] = intval($_GET['category_id']);
 }
 
 if (!empty($_GET['search'])) {
@@ -169,11 +169,14 @@ $where_clause = implode(' AND ', $where_conditions);
 try {
     $stmt = $conn->prepare("
         SELECT i.*,
+               ic.category_name,
                COALESCE(SUM(inv.quantity_on_hand), 0) as total_stock,
                COUNT(DISTINCT inv.store_id) as store_count,
                COALESCE(SUM(inv.quantity_on_hand * inv.unit_cost), 0) as total_value,
-               u.full_name as created_by_name
+               u.full_name as created_by_name,
+               i.cost_price as unit_cost
         FROM items i
+        LEFT JOIN item_categories ic ON i.category_id = ic.category_id
         LEFT JOIN inventory inv ON i.item_id = inv.item_id
         LEFT JOIN users u ON i.created_by = u.user_id
         WHERE $where_clause
@@ -187,17 +190,18 @@ try {
     $items = [];
 }
 
-// Fetch categories
+// Fetch categories from item_categories table
 try {
     $stmt = $conn->prepare("
-        SELECT DISTINCT category 
-        FROM items 
-        WHERE company_id = ? AND category IS NOT NULL
-        ORDER BY category
+        SELECT category_id, category_name 
+        FROM item_categories 
+        WHERE company_id = ? AND is_active = 1
+        ORDER BY category_name
     ");
     $stmt->execute([$company_id]);
-    $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
+    error_log("Error fetching categories: " . $e->getMessage());
     $categories = [];
 }
 
@@ -513,12 +517,12 @@ require_once '../../includes/header.php';
             </div>
             <div class="col-md-3">
                 <label class="form-label fw-bold">Category</label>
-                <select name="category" class="form-select">
+                <select name="category_id" class="form-select">
                     <option value="">All Categories</option>
-                    <?php foreach ($categories as $category): ?>
-                        <option value="<?php echo htmlspecialchars($category); ?>"
-                                <?php echo (isset($_GET['category']) && $_GET['category'] == $category) ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($category); ?>
+                    <?php foreach ($categories as $cat): ?>
+                        <option value="<?php echo htmlspecialchars($cat['category_id']); ?>"
+                                <?php echo (isset($_GET['category_id']) && $_GET['category_id'] == $cat['category_id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($cat['category_name']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -570,9 +574,9 @@ require_once '../../includes/header.php';
                     <!-- Header -->
                     <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
                         <span class="item-code"><?php echo htmlspecialchars($item['item_code']); ?></span>
-                        <?php if (!empty($item['category'])): ?>
+                        <?php if (!empty($item['category_name'])): ?>
                             <span class="category-badge">
-                                <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($item['category']); ?>
+                                <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($item['category_name']); ?>
                             </span>
                         <?php endif; ?>
                         <span class="badge-status <?php echo $item['is_active'] ? 'bg-success' : 'bg-secondary'; ?>">
@@ -755,12 +759,14 @@ require_once '../../includes/header.php';
                         
                         <div class="col-md-4">
                             <label class="form-label fw-bold">Category</label>
-                            <input type="text" name="category" id="category" class="form-control" list="categoryList" placeholder="e.g., Electronics, Furniture">
-                            <datalist id="categoryList">
-                                <?php foreach ($categories as $category): ?>
-                                    <option value="<?php echo htmlspecialchars($category); ?>">
+                            <select name="category_id" id="category_id" class="form-select">
+                                <option value="">Select Category</option>
+                                <?php foreach ($categories as $cat): ?>
+                                    <option value="<?php echo htmlspecialchars($cat['category_id']); ?>">
+                                        <?php echo htmlspecialchars($cat['category_name']); ?>
+                                    </option>
                                 <?php endforeach; ?>
-                            </datalist>
+                            </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-bold">Barcode</label>
@@ -853,9 +859,9 @@ function editItem(item) {
     document.getElementById('item_code').value = item.item_code;
     document.getElementById('item_name').value = item.item_name;
     document.getElementById('description').value = item.description || '';
-    document.getElementById('category').value = item.category || '';
+    document.getElementById('category_id').value = item.category_id || '';
     document.getElementById('unit_of_measure').value = item.unit_of_measure;
-    document.getElementById('unit_cost').value = item.unit_cost;
+    document.getElementById('unit_cost').value = item.cost_price || item.unit_cost || 0;
     document.getElementById('selling_price').value = item.selling_price;
     document.getElementById('reorder_level').value = item.reorder_level;
     document.getElementById('barcode').value = item.barcode || '';

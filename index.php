@@ -422,6 +422,7 @@ require_once 'includes/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Include DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 
@@ -635,7 +636,7 @@ require_once 'includes/header.php';
                                 <div class="text-center text-muted py-4">
                                     <i class="fas fa-university fa-3x mb-3"></i>
                                     <p class="small mb-0">No bank accounts configured</p>
-                                    <a href="modules/settings/bank_accounts.php" class="btn btn-sm btn-outline-primary mt-2">
+                                    <a href="modules/finance/bank_accounts.php" class="btn btn-sm btn-outline-primary mt-2">
                                         <i class="fas fa-plus me-1"></i> Add Bank Account
                                     </a>
                                 </div>
@@ -794,7 +795,7 @@ require_once 'includes/header.php';
                         <h3 class="stats-number"><?php echo number_format($collection_rate, 1); ?>%</h3>
                         <p class="stats-label">Collection Rate</p>
                         <div class="stats-sub">
-                            <a href="modules/reports/collection.php" class="text-success text-decoration-none">
+                            <a href="modules/reports/index.php" class="text-success text-decoration-none">
                                 <i class="fas fa-chart-bar"></i> View Report
                             </a>
                         </div>
@@ -927,7 +928,7 @@ require_once 'includes/header.php';
                             <a href="modules/payments/record.php" class="btn btn-outline-success btn-sm">
                                 <i class="fas fa-money-bill-wave me-2"></i> Record Payment
                             </a>
-                            <a href="modules/expenses/create.php" class="btn btn-outline-danger btn-sm">
+                            <a href="modules/expenses/create_claim.php" class="btn btn-outline-danger btn-sm">
                                 <i class="fas fa-file-invoice-dollar me-2"></i> Record Expense
                             </a>
                             <a href="modules/sales/create.php" class="btn btn-outline-primary btn-sm">

@@ -136,61 +136,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Insert customer
             $sql = "INSERT INTO customers (
-                company_id, customer_type, first_name, middle_name, last_name,
-                email, phone, alternative_phone, national_id, passport_number,
-                tin_number, nationality, occupation,
-                region, district, ward, village, address, postal_address, street_address,
+                company_id, first_name, middle_name, last_name,
+                email, phone1, phone2, national_id, passport_number,
+                region, district, ward, village, street_address,
                 gender, profile_picture,
-                guardian1_name, guardian1_relationship, guardian1_phone,
-                guardian2_name, guardian2_relationship, guardian2_phone,
-                next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
-                notes, is_active, created_by
+                guardian1_name, guardian1_relationship,
+                guardian2_name, guardian2_relationship,
+                is_active, created_by
             ) VALUES (
+                ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?,
                 ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, 1, ?
+                ?, ?,
+                ?, ?,
+                1, ?
             )";
 
             $stmt = $conn->prepare($sql);
             $stmt->execute([
                 $company_id,
-                $_POST['customer_type'] ?? 'individual',
                 $_POST['first_name'],
                 $_POST['middle_name'] ?? null,
                 $_POST['last_name'],
                 $_POST['email'] ?? null,
-                $_POST['phone'],
+                $_POST['phone'] ?? null,
                 $_POST['alternative_phone'] ?? null,
                 $national_id,
                 $passport_number,
-                $_POST['tin_number'] ?? null,
-                $_POST['nationality'] ?? 'Tanzanian',
-                $_POST['occupation'] ?? null,
                 $_POST['region'] ?? null,
                 $_POST['district'] ?? null,
                 $_POST['ward'] ?? null,
                 $_POST['village'] ?? null,
-                $_POST['address'] ?? null,
-                $_POST['postal_address'] ?? null,
                 $_POST['street_address'] ?? null,
                 $_POST['gender'] ?? null,
                 $profile_picture_path,
                 $_POST['guardian1_name'] ?? null,
                 $_POST['guardian1_relationship'] ?? null,
-                $_POST['guardian1_phone'] ?? null,
                 $_POST['guardian2_name'] ?? null,
                 $_POST['guardian2_relationship'] ?? null,
-                $_POST['guardian2_phone'] ?? null,
-                $_POST['next_of_kin_name'] ?? null,
-                $_POST['next_of_kin_phone'] ?? null,
-                $_POST['next_of_kin_relationship'] ?? null,
-                $_POST['notes'] ?? null,
                 $_SESSION['user_id']
             ]);
 
@@ -665,16 +649,7 @@ require_once '../../includes/header.php';
                                value="<?php echo htmlspecialchars($_POST['guardian1_name'] ?? ''); ?>">
                     </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label">Guardian Phone</label>
-                        <input type="text" 
-                               name="guardian1_phone" 
-                               class="form-control" 
-                               placeholder="Enter phone number"
-                               value="<?php echo htmlspecialchars($_POST['guardian1_phone'] ?? ''); ?>">
-                    </div>
-
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label">Relationship</label>
                         <select name="guardian1_relationship" class="form-select">
                             <option value="">Select Relationship</option>
@@ -701,16 +676,7 @@ require_once '../../includes/header.php';
                                value="<?php echo htmlspecialchars($_POST['guardian2_name'] ?? ''); ?>">
                     </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label">Guardian Phone</label>
-                        <input type="text" 
-                               name="guardian2_phone" 
-                               class="form-control" 
-                               placeholder="Enter phone number"
-                               value="<?php echo htmlspecialchars($_POST['guardian2_phone'] ?? ''); ?>">
-                    </div>
-
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label">Relationship</label>
                         <select name="guardian2_relationship" class="form-select">
                             <option value="">Select Relationship</option>

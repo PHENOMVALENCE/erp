@@ -8,7 +8,54 @@ $base_path = $depth > 0 ? str_repeat('../', $depth) : '';
 
 // Get current page for active menu
 $current_page = basename($_SERVER['PHP_SELF']);
-$current_module = basename(dirname($_SERVER['PHP_SELF']));
+$current_dir = dirname($_SERVER['PHP_SELF']);
+$current_module = basename($current_dir);
+
+// Handle special case: "leave management" folder should be treated as "leave"
+if ($current_module == 'leave management') {
+    $current_module = 'leave';
+}
+
+// Build current path for comparison (normalize slashes)
+$current_full_path = str_replace('\\', '/', trim($current_dir . '/' . $current_page, '/'));
+$current_full_path = preg_replace('#^/#', '', $current_full_path); // Remove leading slash
+
+// Function to check if a link is active
+function isActiveLink($link_href, $current_full_path, $current_page, $current_module) {
+    // Normalize the link path
+    $link_path = str_replace('\\', '/', $link_href);
+    
+    // Remove base_path (../) if present
+    $link_path = preg_replace('#^(\.\./)+#', '', $link_path);
+    
+    // Extract module and page from link
+    $link_module = '';
+    $link_page = basename($link_path);
+    
+    if (preg_match('#modules/([^/]+)/#', $link_path, $matches)) {
+        $link_module = $matches[1];
+        if ($link_module == 'leave management') $link_module = 'leave';
+    }
+    
+    // Check if it's the root index.php
+    if ($link_path == 'index.php' && $current_full_path == 'index.php' && $current_module != 'modules') {
+        return true;
+    }
+    
+    // Check by module and page name (most reliable method)
+    if ($link_module == $current_module && $link_page == $current_page) {
+        return true;
+    }
+    
+    // Also check full path match (normalize both)
+    $normalized_link = preg_replace('#^/#', '', $link_path);
+    $normalized_current = preg_replace('#^/#', '', $current_full_path);
+    if ($normalized_link == $normalized_current) {
+        return true;
+    }
+    
+    return false;
+}
 ?>
 
 
@@ -374,7 +421,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
         <ul class="navbar-nav ms-auto">
             <!-- Quick Actions Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Quick Actions">
+                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Quick Actions">
                     <i class="fas fa-bolt"></i>
                 </a>
                 <div class="dropdown-menu dropdown-menu-end" style="min-width: 220px;">
@@ -396,7 +443,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             
             <!-- Messages Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Messages">
+                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Messages">
                     <i class="far fa-envelope"></i>
                     <span class="badge bg-danger">3</span>
                 </a>
@@ -418,7 +465,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             
             <!-- Notifications Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Notifications">
+                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Notifications">
                     <i class="far fa-bell"></i>
                     <span class="badge bg-warning">8</span>
                 </a>
@@ -443,7 +490,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             
             <!-- Tasks Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Tasks">
+                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Tasks">
                     <i class="fas fa-tasks"></i>
                     <span class="badge bg-info">6</span>
                 </a>
@@ -465,7 +512,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
             
             <!-- User Profile Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Profile">
+                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Profile">
                     <div class="user-avatar">
                         <?php echo strtoupper(substr($_SESSION['full_name'] ?? 'U', 0, 1)); ?>
                     </div>
@@ -520,11 +567,11 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Projects & Plots</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Projects</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Project</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/costs.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Project Costs</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Plots</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Plot</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>All Projects</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/create.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/create.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Project</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/costs.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/costs.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Project Costs</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/plots/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>All Plots</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/create.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/plots/create.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Plot</span></a></li>
                         </ul>
                     </li>
 
@@ -610,6 +657,8 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Expenses</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Submit Expense</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/claims.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Claims</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Categories</span></a></li>
                         </ul>
                     </li>
@@ -707,6 +756,7 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Inventory</span>
                         </a>
                         <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/items.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Items</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/stores.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Store Locations</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/stock.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Levels</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/movements.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Movements</span></a></li>
@@ -721,10 +771,10 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Assets</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/add.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/list.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/depreciation.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
                             <!-- assets/categories.php not yet available -->
                         </ul>
                     </li>
@@ -752,11 +802,12 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Leave Management</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Leave</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/my-leaves.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Leaves</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/leave-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Types</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/apply.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/apply.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Apply for Leave</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/my-leaves.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/my-leaves.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>My Leaves</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/balance.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/balance.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Leave Balance</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/approvals.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/approvals.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/leave-types.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/leave-types.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Leave Types</span></a></li>
                         </ul>
                     </li>
 
@@ -767,11 +818,11 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Loans</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/my-loans.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Loans</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/loan-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Products</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/apply.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/my-loans.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/my-loans.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>My Loans</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/approvals.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/approvals.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/loan-types.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/loan-types.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Loan Products</span></a></li>
                         </ul>
                     </li>
 
@@ -782,10 +833,11 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                             <span>Payroll</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/generate.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Run Payroll</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payslips.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payslips</span></a></li>
-                            <!-- payroll/history.php not yet available -->
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/generate.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/generate.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Run Payroll</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payroll.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/payroll.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Process Payroll</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payslips.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/payslips.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Payslips</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/history.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/history.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Payroll History</span></a></li>
                         </ul>
                     </li>
 
@@ -819,10 +871,14 @@ $current_module = basename(dirname($_SERVER['PHP_SELF']));
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Reports Hub</span></a></li>
-                            <!-- reports/sales.php not yet available -->
-                            <!-- reports/financial.php not yet available -->
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/payroll-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll Summary</span></a></li>
-                            <!-- reports/customers.php not yet available -->
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/leave-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Report</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/loan-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Report</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/asset-register.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/depreciation-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation Report</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/employee-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Employee Report</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/expense-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Report</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/petty-cash-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Petty Cash Summary</span></a></li>
                         </ul>
                     </li>
 
@@ -868,6 +924,13 @@ function toggleSidebar() {
 
 // Sidebar menu dropdown functionality
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize top navbar dropdowns in case data attributes are not auto-bound
+    if (typeof bootstrap !== 'undefined') {
+        document.querySelectorAll('.navbar .dropdown-toggle').forEach(function(el) {
+            new bootstrap.Dropdown(el);
+        });
+    }
+
     // Handle sidebar menu dropdowns
     var dropdownLinks = document.querySelectorAll('.nav-sidebar .nav-link.has-dropdown');
     
@@ -904,6 +967,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Keep current module menu open
     document.querySelectorAll('.nav-item.menu-open').forEach(function(item) {
         // Already has menu-open class from PHP, ensure it stays
+    });
+    
+    // Auto-open parent menu if a child link is active
+    const activeLinks = document.querySelectorAll('.nav-treeview .nav-link.active');
+    activeLinks.forEach(function(activeLink) {
+        const parentNavItem = activeLink.closest('.nav-item').parentElement.closest('.nav-item');
+        if (parentNavItem) {
+            parentNavItem.classList.add('menu-open');
+        }
     });
 });
 </script>
