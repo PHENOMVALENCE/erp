@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 23, 2025 at 08:02 PM
+-- Generation Time: Dec 23, 2025 at 09:03 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -1445,6 +1445,8 @@ CREATE TABLE `items` (
   `item_id` int(11) NOT NULL,
   `company_id` int(11) NOT NULL,
   `item_code` varchar(50) NOT NULL,
+  `barcode` varchar(100) DEFAULT NULL,
+  `sku` varchar(100) DEFAULT NULL,
   `item_name` varchar(200) NOT NULL,
   `description` text DEFAULT NULL,
   `category_id` int(11) DEFAULT NULL,
@@ -1606,6 +1608,26 @@ CREATE TABLE `leave_applications` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `leave_balances`
+--
+
+CREATE TABLE `leave_balances` (
+  `balance_id` int(11) NOT NULL,
+  `company_id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `leave_type_id` int(11) NOT NULL,
+  `fiscal_year` int(11) NOT NULL,
+  `entitled_days` int(11) NOT NULL DEFAULT 0,
+  `used_days` int(11) NOT NULL DEFAULT 0,
+  `balance_days` int(11) GENERATED ALWAYS AS (`entitled_days` - `used_days`) STORED,
+  `carried_forward` int(11) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `leave_types`
 --
 
@@ -1697,6 +1719,15 @@ CREATE TABLE `login_attempts` (
   `failure_reason` varchar(200) DEFAULT NULL,
   `attempted_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Login attempt tracking for security';
+
+--
+-- Dumping data for table `login_attempts`
+--
+
+INSERT INTO `login_attempts` (`attempt_id`, `username`, `ip_address`, `user_agent`, `is_successful`, `failure_reason`, `attempted_at`) VALUES
+(1, 'Valence', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', 0, NULL, '2025-12-23 19:21:33'),
+(2, 'Valence', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', 0, NULL, '2025-12-23 19:21:37'),
+(3, 'admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', 1, NULL, '2025-12-23 19:21:44');
 
 -- --------------------------------------------------------
 
@@ -3371,7 +3402,10 @@ ALTER TABLE `document_sequences`
 -- Indexes for table `employees`
 --
 ALTER TABLE `employees`
-  ADD PRIMARY KEY (`employee_id`);
+  ADD PRIMARY KEY (`employee_id`),
+  ADD KEY `idx_user_id` (`user_id`),
+  ADD KEY `idx_department` (`department_id`),
+  ADD KEY `idx_status` (`employment_status`);
 
 --
 -- Indexes for table `employee_loans`
@@ -3443,7 +3477,9 @@ ALTER TABLE `invoice_items`
 -- Indexes for table `items`
 --
 ALTER TABLE `items`
-  ADD PRIMARY KEY (`item_id`);
+  ADD PRIMARY KEY (`item_id`),
+  ADD KEY `idx_category` (`category_id`),
+  ADD KEY `idx_code` (`item_code`);
 
 --
 -- Indexes for table `item_categories`
@@ -3473,7 +3509,19 @@ ALTER TABLE `leads`
 -- Indexes for table `leave_applications`
 --
 ALTER TABLE `leave_applications`
-  ADD PRIMARY KEY (`leave_id`);
+  ADD PRIMARY KEY (`leave_id`),
+  ADD KEY `idx_employee_leave` (`employee_id`,`leave_type_id`),
+  ADD KEY `idx_status` (`status`);
+
+--
+-- Indexes for table `leave_balances`
+--
+ALTER TABLE `leave_balances`
+  ADD PRIMARY KEY (`balance_id`),
+  ADD UNIQUE KEY `unique_balance` (`company_id`,`employee_id`,`leave_type_id`,`fiscal_year`),
+  ADD KEY `idx_employee` (`employee_id`),
+  ADD KEY `idx_leave_type` (`leave_type_id`),
+  ADD KEY `idx_fiscal_year` (`fiscal_year`);
 
 --
 -- Indexes for table `leave_types`
@@ -3485,7 +3533,9 @@ ALTER TABLE `leave_types`
 -- Indexes for table `loan_payments`
 --
 ALTER TABLE `loan_payments`
-  ADD PRIMARY KEY (`payment_id`);
+  ADD PRIMARY KEY (`payment_id`),
+  ADD KEY `idx_loan` (`loan_id`),
+  ADD KEY `idx_date` (`payment_date`);
 
 --
 -- Indexes for table `loan_repayment_schedule`
@@ -3552,7 +3602,8 @@ ALTER TABLE `payroll`
 -- Indexes for table `payroll_details`
 --
 ALTER TABLE `payroll_details`
-  ADD PRIMARY KEY (`payroll_detail_id`);
+  ADD PRIMARY KEY (`payroll_detail_id`),
+  ADD KEY `idx_payroll_employee` (`payroll_id`,`employee_id`);
 
 --
 -- Indexes for table `permissions`
@@ -4111,6 +4162,12 @@ ALTER TABLE `leave_applications`
   MODIFY `leave_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `leave_balances`
+--
+ALTER TABLE `leave_balances`
+  MODIFY `balance_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `leave_types`
 --
 ALTER TABLE `leave_types`
@@ -4138,7 +4195,7 @@ ALTER TABLE `loan_types`
 -- AUTO_INCREMENT for table `login_attempts`
 --
 ALTER TABLE `login_attempts`
-  MODIFY `attempt_id` bigint(20) NOT NULL AUTO_INCREMENT;
+  MODIFY `attempt_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `notification_templates`
