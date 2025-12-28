@@ -1,0 +1,1 @@
+[15-Dec-2025 10:14:31 Africa/Dar_es_Salaam] Error creating customer: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'guardian1_phone' in 'INSERT INTO'
