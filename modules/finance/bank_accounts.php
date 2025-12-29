@@ -452,19 +452,13 @@ require_once '../../includes/header.php';
 <!-- Main Content -->
 <section class="content">
     <div class="container-fluid">
-
         <?php if (!empty($errors)): ?>
         <div class="alert alert-danger alert-dismissible fade show">
             <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Errors:</h5>
-            <ul class="mb-0">
-                <?php foreach ($errors as $error): ?>
-                    <li><?php echo htmlspecialchars($error); ?></li>
-                <?php endforeach; ?>
-            </ul>
+            <ul class="mb-0"><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error); ?></li><?php endforeach; ?></ul>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
         <?php endif; ?>
-
         <?php if ($success): ?>
         <div class="alert alert-success alert-dismissible fade show">
             <i class="fas fa-check-circle me-2"></i><?php echo htmlspecialchars($success); ?>
@@ -472,35 +466,13 @@ require_once '../../includes/header.php';
         </div>
         <?php endif; ?>
 
-        <!-- Statistics Cards -->
         <div class="row g-3 mb-4">
-            <div class="col-lg-3 col-md-6">
-                <div class="stats-card primary">
-                    <div class="stats-number"><?php echo number_format($total_accounts); ?></div>
-                    <div class="stats-label">Total Accounts</div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="stats-card info">
-                    <div class="stats-number"><?php echo number_format($bank_accounts); ?> / <?php echo number_format($mobile_accounts); ?></div>
-                    <div class="stats-label">Banks / Mobile Money</div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="stats-card warning">
-                    <div class="stats-number">TSH <?php echo number_format($total_balance / 1000000, 2); ?>M</div>
-                    <div class="stats-label">Total Balance</div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="stats-card success">
-                    <div class="stats-number"><?php echo number_format($active_accounts); ?></div>
-                    <div class="stats-label">Active Accounts</div>
-                </div>
-            </div>
+            <div class="col-lg-3 col-md-6"><div class="stats-card primary"><div class="stats-number"><?php echo number_format($total_accounts); ?></div><div class="stats-label">Total Accounts</div></div></div>
+            <div class="col-lg-3 col-md-6"><div class="stats-card info"><div class="stats-number"><?php echo number_format($bank_accounts); ?> / <?php echo number_format($mobile_accounts); ?></div><div class="stats-label">Banks / Mobile Money</div></div></div>
+            <div class="col-lg-3 col-md-6"><div class="stats-card warning"><div class="stats-number">TSH <?php echo number_format($total_balance / 1000000, 2); ?>M</div><div class="stats-label">Total Balance</div></div></div>
+            <div class="col-lg-3 col-md-6"><div class="stats-card success"><div class="stats-number"><?php echo number_format($active_accounts); ?></div><div class="stats-label">Active Accounts</div></div></div>
         </div>
 
-        <!-- Accounts List -->
         <div class="row">
             <?php if (empty($accounts)): ?>
             <div class="col-12">
@@ -508,9 +480,7 @@ require_once '../../includes/header.php';
                     <i class="fas fa-wallet fa-4x text-muted mb-3"></i>
                     <h4>No Accounts Found</h4>
                     <p class="text-muted">Start by adding your first bank or mobile money account</p>
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#accountModal">
-                        <i class="fas fa-plus-circle me-1"></i> Add Account
-                    </button>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#accountModal"><i class="fas fa-plus-circle me-1"></i> Add Account</button>
                 </div>
             </div>
             <?php else: ?>
@@ -521,91 +491,43 @@ require_once '../../includes/header.php';
                             <div style="flex: 1;">
                                 <div class="account-name">
                                     <?php if ($account['account_category'] === 'bank'): ?>
-                                        <i class="fas fa-university account-icon icon-bank"></i>
-                                        <?php echo htmlspecialchars($account['bank_name']); ?>
+                                        <i class="fas fa-university account-icon icon-bank"></i><?php echo htmlspecialchars($account['bank_name']); ?>
                                     <?php else: ?>
-                                        <i class="fas fa-mobile-alt account-icon icon-mobile"></i>
-                                        <?php echo htmlspecialchars($account['mobile_provider']); ?>
+                                        <i class="fas fa-mobile-alt account-icon icon-mobile"></i><?php echo htmlspecialchars($account['mobile_provider']); ?>
                                     <?php endif; ?>
-                                    
-                                    <?php if ($account['is_default']): ?>
-                                        <span class="badge-default ms-2">Default</span>
-                                    <?php endif; ?>
-                                    <?php if (!$account['is_active']): ?>
-                                        <span class="badge-inactive ms-2">Inactive</span>
-                                    <?php endif; ?>
-                                    <?php if ($account['account_category'] === 'mobile_money'): ?>
-                                        <span class="badge-mobile ms-2">Mobile Money</span>
-                                    <?php else: ?>
-                                        <span class="badge-category ms-2">Bank</span>
-                                    <?php endif; ?>
+                                    <?php if ($account['is_default']): ?><span class="badge-default ms-2">Default</span><?php endif; ?>
+                                    <?php if (!$account['is_active']): ?><span class="badge-inactive ms-2">Inactive</span><?php endif; ?>
+                                    <?php if ($account['account_category'] === 'mobile_money'): ?><span class="badge-mobile ms-2">Mobile Money</span><?php else: ?><span class="badge-category ms-2">Bank</span><?php endif; ?>
                                 </div>
-                                <div class="account-subtitle">
-                                    <?php echo htmlspecialchars($account['account_name']); ?>
-                                </div>
+                                <div class="account-subtitle"><?php echo htmlspecialchars($account['account_name']); ?></div>
                                 <div class="account-number">
                                     <?php if ($account['account_category'] === 'bank'): ?>
                                         A/C: <?php echo htmlspecialchars($account['account_number']); ?>
                                     <?php else: ?>
                                         <?php echo htmlspecialchars($account['mobile_number']); ?>
-                                        <?php if ($account['mobile_account_name']): ?>
-                                            | <?php echo htmlspecialchars($account['mobile_account_name']); ?>
-                                        <?php endif; ?>
+                                        <?php if ($account['mobile_account_name']): ?>| <?php echo htmlspecialchars($account['mobile_account_name']); ?><?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                             </div>
-                            <div class="account-balance">
-                                <?php echo htmlspecialchars($account['currency']); ?> 
-                                <?php echo number_format($account['current_balance'], 2); ?>
-                            </div>
+                            <div class="account-balance"><?php echo htmlspecialchars($account['currency']); ?> <?php echo number_format($account['current_balance'], 2); ?></div>
                         </div>
-
                         <div class="account-details">
                             <?php if ($account['account_category'] === 'bank' && !empty($account['branch_name'])): ?>
-                            <div class="detail-item">
-                                <div class="detail-label">Branch</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($account['branch_name']); ?></div>
-                            </div>
+                            <div class="detail-item"><div class="detail-label">Branch</div><div class="detail-value"><?php echo htmlspecialchars($account['branch_name']); ?></div></div>
                             <?php endif; ?>
-                            <div class="detail-item">
-                                <div class="detail-label">Account Type</div>
-                                <div class="detail-value"><?php echo ucfirst(htmlspecialchars($account['account_type'])); ?></div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Opening Balance</div>
-                                <div class="detail-value"><?php echo number_format($account['opening_balance'], 2); ?></div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Transactions</div>
-                                <div class="detail-value">
-                                    <i class="fas fa-exchange-alt me-1 text-info"></i>
-                                    <?php echo number_format($account['transaction_count']); ?>
-                                </div>
-                            </div>
+                            <div class="detail-item"><div class="detail-label">Account Type</div><div class="detail-value"><?php echo ucfirst(htmlspecialchars($account['account_type'])); ?></div></div>
+                            <div class="detail-item"><div class="detail-label">Opening Balance</div><div class="detail-value"><?php echo number_format($account['opening_balance'], 2); ?></div></div>
+                            <div class="detail-item"><div class="detail-label">Transactions</div><div class="detail-value"><i class="fas fa-exchange-alt me-1 text-info"></i><?php echo number_format($account['transaction_count']); ?></div></div>
                         </div>
-
                         <div class="action-buttons mt-3">
-                            <button type="button" 
-                                    class="btn btn-sm btn-primary"
-                                    onclick="editAccount(<?php echo htmlspecialchars(json_encode($account)); ?>)">
-                                <i class="fas fa-edit me-1"></i> Edit
-                            </button>
-                            <a href="bank_transactions.php?account_id=<?php echo $account['bank_account_id']; ?>" 
-                               class="btn btn-sm btn-success">
-                                <i class="fas fa-list me-1"></i> Transactions
-                            </a>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="editAccount(<?php echo htmlspecialchars(json_encode($account)); ?>)"><i class="fas fa-edit me-1"></i> Edit</button>
+                            <a href="account_statement.php?account_id=<?php echo $account['bank_account_id']; ?>" class="btn btn-sm btn-warning"><i class="fas fa-file-invoice-dollar me-1"></i> Statement</a>
+                            <a href="bank_transactions.php?account_id=<?php echo $account['bank_account_id']; ?>" class="btn btn-sm btn-success"><i class="fas fa-list me-1"></i> Transactions</a>
                             <?php if ($account['account_category'] === 'bank'): ?>
-                            <a href="bank_reconciliation.php?account_id=<?php echo $account['bank_account_id']; ?>" 
-                               class="btn btn-sm btn-info">
-                                <i class="fas fa-check-double me-1"></i> Reconcile
-                            </a>
+                            <a href="bank_reconciliation.php?account_id=<?php echo $account['bank_account_id']; ?>" class="btn btn-sm btn-info"><i class="fas fa-check-double me-1"></i> Reconcile</a>
                             <?php endif; ?>
                             <?php if ($account['is_active']): ?>
-                            <button type="button" 
-                                    class="btn btn-sm btn-outline-danger"
-                                    onclick="deactivateAccount(<?php echo $account['bank_account_id']; ?>, '<?php echo htmlspecialchars($account['account_name']); ?>')">
-                                <i class="fas fa-ban me-1"></i> Deactivate
-                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deactivateAccount(<?php echo $account['bank_account_id']; ?>, '<?php echo htmlspecialchars($account['account_name']); ?>')"><i class="fas fa-ban me-1"></i> Deactivate</button>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -613,7 +535,6 @@ require_once '../../includes/header.php';
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
-
     </div>
 </section>
 

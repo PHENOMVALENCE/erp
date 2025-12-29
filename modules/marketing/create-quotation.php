@@ -157,12 +157,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             }
             
         } elseif ($_POST['action'] === 'save_quotation') {
-            // Validate
-            if (empty($_POST['customer_id'])) {
-                throw new Exception('Customer is required');
+            // Validate - must have customer (lead is optional reference)
+            $customer_id = !empty($_POST['customer_id']) ? (int)$_POST['customer_id'] : null;
+            $lead_id = !empty($_POST['lead_id']) ? (int)$_POST['lead_id'] : null;
+            
+            // If no customer but has lead, try to get customer from lead conversion
+            if (!$customer_id && $lead_id) {
+                // Check if lead has been converted to customer
+                $lead_check = $conn->prepare("
+                    SELECT customer_id FROM leads 
+                    WHERE lead_id = ? AND company_id = ? AND customer_id IS NOT NULL
+                ");
+                $lead_check->execute([$lead_id, $company_id]);
+                $lead_data = $lead_check->fetch(PDO::FETCH_ASSOC);
+                
+                if ($lead_data && $lead_data['customer_id']) {
+                    $customer_id = $lead_data['customer_id'];
+                } else {
+                    throw new Exception('Please select a customer. If creating quotation from a lead, the lead must first be converted to a customer.');
+                }
             }
             
-            if (empty($_POST['items']) || !is_array($_POST['items'])) {
+            if (!$customer_id) {
+                throw new Exception('Customer is required. Please select a customer from the dropdown.');
+            }
+            
+            // Parse items from JSON string
+            $items = [];
+            if (!empty($_POST['items'])) {
+                $items = json_decode($_POST['items'], true);
+            }
+            
+            if (empty($items) || !is_array($items)) {
                 throw new Exception('At least one item is required');
             }
             
@@ -175,6 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     $stmt = $conn->prepare("
                         UPDATE quotations SET
                             customer_id = ?,
+                            lead_id = ?,
                             quotation_date = ?,
                             valid_until_date = ?,
                             subtotal = ?,
@@ -191,7 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     ");
                     
                     $stmt->execute([
-                        $_POST['customer_id'],
+                        $customer_id,
+                        $lead_id,
                         $_POST['quotation_date'],
                         $_POST['valid_until_date'],
                         $_POST['subtotal'],
@@ -241,8 +269,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                         $quotation_number,
                         $_POST['quotation_date'],
                         $_POST['valid_until_date'],
-                        $_POST['customer_id'],
-                        $_POST['lead_id'] ?? null,
+                        $customer_id,
+                        $lead_id,
                         $_POST['subtotal'],
                         $_POST['tax_amount'] ?? 0,
                         $_POST['discount_amount'] ?? 0,
@@ -266,7 +294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
                 ");
                 
-                foreach ($_POST['items'] as $item) {
+                foreach ($items as $item) {
                     $item_stmt->execute([
                         $quote_id,
                         $item['description'],
@@ -520,6 +548,11 @@ require_once '../../includes/header.php';
                             <i class="fas fa-user me-2 text-primary"></i>Customer Information
                         </div>
                         
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Note:</strong> Customer is required. Lead is optional for reference/tracking purposes.
+                        </div>
+                        
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Select Customer <span class="text-danger">*</span></label>
@@ -535,9 +568,9 @@ require_once '../../includes/header.php';
                             </div>
                             
                             <div class="col-md-6">
-                                <label class="form-label">Lead Reference (Optional)</label>
+                                <label class="form-label">OR Select Lead</label>
                                 <select class="form-select" name="lead_id" id="lead_id">
-                                    <option value="">-- No Lead Reference --</option>
+                                    <option value="">-- Select Lead --</option>
                                     <?php foreach ($leads as $lead): ?>
                                     <option value="<?php echo $lead['lead_id']; ?>"
                                             <?php echo ($quotation && $quotation['lead_id'] == $lead['lead_id']) ? 'selected' : ''; ?>>
@@ -1169,13 +1202,28 @@ function calculateTotals() {
 document.getElementById('quotationForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
+    // Validate customer is required
+    const customerId = document.getElementById('customer_id').value;
+    
+    if (!customerId) {
+        alert('Please select a Customer (required)');
+        return;
+    }
+    
+    // Validate items
     if (quotationItems.length === 0) {
         alert('Please add at least one item to the quotation');
         return;
     }
     
     const formData = new FormData(this);
+    
+    // Add items as JSON string
     formData.append('items', JSON.stringify(quotationItems));
+    
+    // Debug: Show what we're sending
+    console.log('Sending items:', quotationItems);
+    console.log('Form data items:', formData.get('items'));
     
     $.ajax({
         url: '',
@@ -1192,8 +1240,10 @@ document.getElementById('quotationForm').addEventListener('submit', function(e) 
                 alert('Error: ' + response.message);
             }
         },
-        error: function() {
-            alert('Error saving quotation');
+        error: function(xhr, status, error) {
+            console.error('AJAX Error:', error);
+            console.error('Response:', xhr.responseText);
+            alert('Error saving quotation. Check console for details.');
         }
     });
 });

@@ -309,6 +309,43 @@ require_once '../../includes/header.php';
     border-left: 4px solid #007bff;
 }
 
+/* NEW STYLES FOR ACCOUNT DETAILS */
+.account-section {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-left: 4px solid #007bff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-top: 1.5rem;
+}
+
+.account-item {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    border-left: 3px solid #28a745;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.account-item:last-child {
+    margin-bottom: 0;
+}
+
+.account-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.account-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    font-family: 'Courier New', monospace;
+}
+
 @media print {
     .no-print {
         display: none !important;
@@ -511,7 +548,7 @@ require_once '../../includes/header.php';
                             <span class="info-label">Amount</span>
                             <span class="info-value text-success">TSH <?php echo number_format($payment['amount'], 0); ?></span>
                         </div>
-                        <?php if ($payment['tax_amount'] > 0): ?>
+                        <?php if (!empty($payment['tax_amount']) && $payment['tax_amount'] > 0): ?>
                         <div class="info-item">
                             <span class="info-label">Tax Amount</span>
                             <span class="info-value">TSH <?php echo number_format($payment['tax_amount'], 0); ?></span>
@@ -542,6 +579,148 @@ require_once '../../includes/header.php';
                         </div>
                         <?php endif; ?>
                     </div>
+
+                    <!-- NEW: Account & Transaction Details Section -->
+                    <?php if ($payment['payment_method'] != 'cash'): ?>
+                    <div class="account-section">
+                        <h6 class="fw-bold mb-3">
+                            <i class="fas fa-university me-2"></i>Account & Transaction Information
+                        </h6>
+                        
+                        <?php if (!empty($payment['bank_name'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-university me-1"></i>Client Bank
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['bank_name']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($payment['account_number'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-credit-card me-1"></i>Client Account Number
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['account_number']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($payment['account_name'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-user-tag me-1"></i>Account Name
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['account_name']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($payment['transaction_reference'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-hashtag me-1"></i>Transaction Reference
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['transaction_reference']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if ($payment['payment_method'] == 'cheque' && !empty($payment['cheque_number'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-money-check me-1"></i>Cheque Number
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['cheque_number']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if ($payment['payment_method'] == 'mobile_money' && !empty($payment['mobile_number'])): ?>
+                        <div class="account-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-mobile-alt me-1"></i>Mobile Number
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value"><?php echo htmlspecialchars($payment['mobile_number']); ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <!-- Company Receiving Account -->
+                        <?php if ($payment['status'] == 'approved'): ?>
+                        <hr class="my-3">
+                        <h6 class="fw-bold mb-3 text-primary">
+                            <i class="fas fa-building me-2"></i>Company Receiving Account
+                        </h6>
+                        
+                        <div class="account-item" style="border-left-color: #007bff;">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-university me-1"></i>Company Bank
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value">
+                                        <?php echo !empty($payment['company_bank_name']) ? htmlspecialchars($payment['company_bank_name']) : 'CRDB Bank'; ?>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="account-item" style="border-left-color: #007bff;">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <span class="account-label">
+                                        <i class="fas fa-credit-card me-1"></i>Company Account
+                                    </span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span class="account-value">
+                                        <?php echo !empty($payment['company_account_number']) ? htmlspecialchars($payment['company_account_number']) : '****-****-****'; ?>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-success mt-3 mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>Verified:</strong> Payment deposited to company account
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
 
                     <?php if (!empty($payment['remarks'])): ?>
                     <div class="mt-4">
@@ -638,6 +817,7 @@ require_once '../../includes/header.php';
                         <i class="fas fa-info-circle me-2 text-info"></i>System Information
                     </h5>
                     
+                    <?php if (!empty($payment['created_at'])): ?>
                     <div class="timeline-item <?php echo $payment['status']; ?>">
                         <div class="small text-muted">Created</div>
                         <div class="fw-bold"><?php echo date('M d, Y h:i A', strtotime($payment['created_at'])); ?></div>
@@ -645,8 +825,9 @@ require_once '../../includes/header.php';
                         <div class="small text-muted">By: <?php echo htmlspecialchars($payment['created_by_name']); ?></div>
                         <?php endif; ?>
                     </div>
+                    <?php endif; ?>
 
-                    <?php if ($payment['status'] == 'approved' && $payment['approved_at']): ?>
+                    <?php if ($payment['status'] == 'approved' && !empty($payment['approved_at'])): ?>
                     <div class="timeline-item approved mt-3">
                         <div class="small text-muted">Approved</div>
                         <div class="fw-bold"><?php echo date('M d, Y h:i A', strtotime($payment['approved_at'])); ?></div>
@@ -656,14 +837,14 @@ require_once '../../includes/header.php';
                     </div>
                     <?php endif; ?>
 
-                    <?php if ($payment['updated_at'] != $payment['created_at']): ?>
+                    <?php if (!empty($payment['updated_at']) && !empty($payment['created_at']) && $payment['updated_at'] != $payment['created_at']): ?>
                     <div class="timeline-item mt-3">
                         <div class="small text-muted">Last Updated</div>
                         <div class="fw-bold"><?php echo date('M d, Y h:i A', strtotime($payment['updated_at'])); ?></div>
                     </div>
                     <?php endif; ?>
 
-                    <?php if ($payment['is_reconciled']): ?>
+                    <?php if (!empty($payment['is_reconciled']) && !empty($payment['reconciliation_date'])): ?>
                     <div class="timeline-item approved mt-3">
                         <div class="small text-muted">Reconciled</div>
                         <div class="fw-bold"><?php echo date('M d, Y', strtotime($payment['reconciliation_date'])); ?></div>

@@ -12,160 +12,113 @@ $db = Database::getInstance();
 $db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
+$user_id = $_SESSION['user_id'];
 
-// Initialize defaults
-$stats = ['total_types' => 0, 'active_types' => 0, 'inactive_types' => 0];
-$trans_data = [];
-$tax_types = [];
+$error = '';
+$success = '';
 
-// Fetch statistics
-try {
-    $stats_query = "
-        SELECT 
-            COUNT(*) as total_types,
-            SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_types,
-            SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive_types
-        FROM tax_types
-        WHERE company_id = ?
-    ";
-    $stmt = $conn->prepare($stats_query);
-    $stmt->execute([$company_id]);
-    $stats_result = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($stats_result) {
-        $stats = [
-            'total_types' => (int)$stats_result['total_types'],
-            'active_types' => (int)$stats_result['active_types'],
-            'inactive_types' => (int)$stats_result['inactive_types']
-        ];
-    }
-} catch (PDOException $e) {
-    error_log("Error fetching tax type stats: " . $e->getMessage());
+if (isset($_SESSION['success_message'])) {
+    $success = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
 }
 
-// Check if tax_transactions table exists (optional)
-$trans_table_exists = false;
-try {
-    $result = $conn->query("SHOW TABLES LIKE 'tax_transactions'");
-    $trans_table_exists = $result->rowCount() > 0;
-    
-    if ($trans_table_exists) {
-        $trans_query = "
-            SELECT 
-                tax_type_id,
-                COUNT(*) as transaction_count,
-                COALESCE(SUM(tax_amount), 0) as total_collected
-            FROM tax_transactions
-            WHERE company_id = ?
-            GROUP BY tax_type_id
-        ";
-        $stmt = $conn->prepare($trans_query);
-        $stmt->execute([$company_id]);
-        $trans_stats = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach ($trans_stats as $row) {
-            $trans_data[$row['tax_type_id']] = [
-                'count' => (int)$row['transaction_count'],
-                'total' => (float)$row['total_collected']
-            ];
-        }
-    }
-} catch (PDOException $e) {
-    error_log("Error fetching transaction stats: " . $e->getMessage());
-}
-
-// Build filter conditions
-$where_conditions = ["company_id = ?"];
-$params = [$company_id];
-
-if (isset($_GET['status']) && $_GET['status'] !== '') {
-    $where_conditions[] = "is_active = ?";
-    $params[] = (int)$_GET['status'];
-}
-
-if (!empty($_GET['search'])) {
-    $where_conditions[] = "(tax_code LIKE ? OR tax_name LIKE ? OR description LIKE ?)";
-    $search = '%' . trim($_GET['search']) . '%';
-    $params[] = $search;
-    $params[] = $search;
-    $params[] = $search;
-}
-
-if (!empty($_GET['applies_to']) && $_GET['applies_to'] !== 'all') {
-    $where_conditions[] = "applies_to = ?";
-    $params[] = $_GET['applies_to'];
-}
-
-$where_clause = implode(' AND ', $where_conditions);
-
-// Pagination setup
-$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$per_page = 15;
-$offset = ($page - 1) * $per_page;
-
-// Get total records for pagination
-try {
-    $count_query = "SELECT COUNT(*) FROM tax_types WHERE " . $where_clause;
-    $stmt = $conn->prepare($count_query);
-    $stmt->execute($params);
-    $total_records = $stmt->fetchColumn();
-    $total_pages = ceil($total_records / $per_page);
-} catch (PDOException $e) {
-    error_log("Error counting tax types: " . $e->getMessage());
-    $total_records = 0;
-    $total_pages = 0;
-}
-
-// Fetch tax types with safe query
-try {
-    $query = "
-        SELECT 
-            tt.*,
-            COALESCE(u.full_name, 'System') as created_by_name
-        FROM tax_types tt
-        LEFT JOIN users u ON tt.created_by = u.user_id
-        WHERE " . $where_clause . "
-        ORDER BY is_active DESC, tax_name ASC
-        LIMIT ? OFFSET ?
-    ";
-    
-    $params[] = $per_page;
-    $params[] = $offset;
-    
-    $stmt = $conn->prepare($query);
-    $stmt->execute($params);
-    $tax_types = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-} catch (PDOException $e) {
-    error_log("Error fetching tax types: " . $e->getMessage());
-    // Fallback to simple query without JOIN
+// ==================== HANDLE DELETE ====================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_tax'])) {
     try {
-        array_pop($params); // Remove offset
-        array_pop($params); // Remove per_page
+        $tax_type_id = (int)$_POST['tax_type_id'];
         
-        $fallback_query = "
-            SELECT * FROM tax_types 
-            WHERE " . $where_clause . "
-            ORDER BY is_active DESC, tax_name ASC
-            LIMIT ? OFFSET ?
-        ";
-        
-        $params[] = $per_page;
-        $params[] = $offset;
-        
-        $stmt = $conn->prepare($fallback_query);
-        $stmt->execute($params);
-        $tax_types = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Add created_by_name as 'System' for all
-        foreach ($tax_types as &$tax) {
-            $tax['created_by_name'] = 'System';
-        }
-    } catch (PDOException $e2) {
-        error_log("Fallback query failed: " . $e2->getMessage());
-        $tax_types = [];
+        $stmt = $conn->prepare("DELETE FROM tax_types WHERE tax_type_id = ? AND company_id = ?");
+        $stmt->execute([$tax_type_id, $company_id]);
+        $success = "Tax type deleted successfully";
+    } catch (Exception $e) {
+        $error = "Failed to delete tax type: " . $e->getMessage();
     }
 }
+
+// ==================== HANDLE EDIT ====================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tax'])) {
+    try {
+        $conn->beginTransaction();
+        
+        $tax_type_id = (int)$_POST['tax_type_id'];
+        $tax_name = trim($_POST['tax_name']);
+        $tax_code = trim($_POST['tax_code']);
+        $tax_category = $_POST['tax_category'];
+        $tax_rate = (float)$_POST['tax_rate'];
+        
+        if (!$tax_name || !$tax_code || !$tax_category || $tax_rate < 0) {
+            throw new Exception("Please fill in all required fields");
+        }
+        
+        $stmt = $conn->prepare("
+            SELECT tax_type_id FROM tax_types 
+            WHERE tax_code = ? AND company_id = ? AND tax_type_id != ?
+        ");
+        $stmt->execute([$tax_code, $company_id, $tax_type_id]);
+        if ($stmt->rowCount() > 0) {
+            throw new Exception("Tax code already exists");
+        }
+        
+        $stmt = $conn->prepare("
+            UPDATE tax_types SET
+                tax_name = ?, tax_code = ?, tax_category = ?, tax_rate = ?,
+                calculation_method = ?, applies_to = ?, account_code = ?,
+                description = ?, is_active = ?, updated_at = NOW()
+            WHERE tax_type_id = ? AND company_id = ?
+        ");
+        
+        $stmt->execute([
+            $tax_name, $tax_code, $tax_category, $tax_rate,
+            $_POST['calculation_method'], $_POST['applies_to'],
+            trim($_POST['account_code']), trim($_POST['description']),
+            isset($_POST['is_active']) ? 1 : 0,
+            $tax_type_id, $company_id
+        ]);
+        
+        $conn->commit();
+        $success = "Tax type updated successfully";
+        
+    } catch (Exception $e) {
+        $conn->rollBack();
+        $error = $e->getMessage();
+    }
+}
+
+// ==================== HANDLE TOGGLE ====================
+if (isset($_GET['toggle']) && isset($_GET['id'])) {
+    try {
+        $tax_type_id = (int)$_GET['id'];
+        $stmt = $conn->prepare("UPDATE tax_types SET is_active = NOT is_active WHERE tax_type_id = ? AND company_id = ?");
+        $stmt->execute([$tax_type_id, $company_id]);
+        $success = "Status updated successfully";
+    } catch (Exception $e) {
+        $error = "Failed to update status: " . $e->getMessage();
+    }
+}
+
+// ==================== FETCH TAX TYPES ====================
+$tax_types = [];
+try {
+    $stmt = $conn->prepare("
+        SELECT t.*, u.full_name as created_by_name, DATEDIFF(NOW(), t.created_at) as days_old
+        FROM tax_types t
+        LEFT JOIN users u ON t.created_by = u.user_id
+        WHERE t.company_id = ?
+        ORDER BY t.tax_category, t.tax_name
+    ");
+    $stmt->execute([$company_id]);
+    $tax_types = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $error = "Failed to load tax types: " . $e->getMessage();
+}
+
+$stats = [
+    'total_types' => count($tax_types),
+    'active_types' => count(array_filter($tax_types, fn($t) => $t['is_active'])),
+    'vat_types' => count(array_filter($tax_types, fn($t) => $t['tax_category'] == 'vat')),
+    'wht_types' => count(array_filter($tax_types, fn($t) => $t['tax_category'] == 'withholding')),
+    'recently_added' => count(array_filter($tax_types, fn($t) => isset($t['days_old']) && $t['days_old'] <= 7))
+];
 
 $page_title = 'Tax Types';
 require_once '../../includes/header.php';
@@ -173,573 +126,469 @@ require_once '../../includes/header.php';
 
 <style>
 .stats-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
-    transition: all 0.3s ease;
+    background: #fff;
+    border-radius: 6px;
+    padding: 0.875rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 3px solid #007bff;
+    height: 100%;
 }
-
-.stats-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-}
-
-.stats-number {
-    font-size: 2rem;
+.stats-value {
+    font-size: 1.5rem;
     font-weight: 700;
-    line-height: 1;
+    color: #2c3e50;
+    margin-bottom: 0.25rem;
 }
-
 .stats-label {
-    font-size: 0.85rem;
-    font-weight: 500;
-    opacity: 0.9;
+    font-size: 0.7rem;
+    color: #6c757d;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-top: 0.5rem;
+    font-weight: 600;
 }
-
-.filter-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border: 1px solid #e9ecef;
-}
-
-.table-container {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+.table-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     overflow: hidden;
 }
-
-.table {
-    margin-bottom: 0;
-}
-
-.table thead {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-}
-
 .table thead th {
-    font-weight: 600;
+    background: #f8f9fa;
+    font-weight: 700;
+    font-size: 0.8rem;
     text-transform: uppercase;
-    font-size: 0.75rem;
     letter-spacing: 0.5px;
     color: #495057;
     border-bottom: 2px solid #dee2e6;
     padding: 1rem 0.75rem;
-    white-space: nowrap;
 }
-
-.table tbody tr {
-    transition: all 0.2s ease;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-    transform: scale(1.01);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
 .table tbody td {
-    padding: 1rem 0.75rem;
+    padding: 0.875rem 0.75rem;
     vertical-align: middle;
+    font-size: 0.875rem;
 }
-
-.tax-code {
-    font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-    padding: 0.4rem 0.8rem;
-    border-radius: 6px;
-    font-weight: 600;
-    color: #1976d2;
-    font-size: 0.85rem;
-    border: 1px solid #90caf9;
+.table tbody tr:hover {
+    background: #f8f9fa;
+}
+.category-badge {
     display: inline-block;
-}
-
-.tax-name {
-    font-weight: 600;
-    color: #212529;
-    font-size: 0.95rem;
-}
-
-.tax-rate-badge {
-    background: linear-gradient(135deg, #d4edda, #c3e6cb);
-    color: #155724;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 1.1rem;
-    display: inline-block;
-    border: 1px solid #b1dfbb;
-}
-
-.status-badge {
-    padding: 0.4rem 0.9rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: inline-block;
 }
-
-.status-badge.active {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-
-.status-badge.inactive {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
-
-.applies-to-badge {
-    background: #fff3cd;
-    color: #856404;
-    padding: 0.3rem 0.7rem;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border: 1px solid #ffeeba;
-    display: inline-block;
-}
-
-.transaction-info {
-    font-size: 0.85rem;
-}
-
-.transaction-info .count {
-    color: #6c757d;
-    font-weight: 500;
-}
-
-.transaction-info .amount {
-    color: #28a745;
+.category-badge.vat { background: #d4edda; color: #155724; }
+.category-badge.withholding { background: #fff3cd; color: #856404; }
+.category-badge.excise { background: #f8d7da; color: #721c24; }
+.category-badge.customs { background: #d1ecf1; color: #0c5460; }
+.category-badge.other { background: #e2e3e5; color: #383d41; }
+.tax-code {
+    font-family: 'Courier New', monospace;
     font-weight: 600;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    color: #6c757d;
-}
-
-.empty-state i {
-    font-size: 5rem;
-    opacity: 0.3;
-    margin-bottom: 1.5rem;
-}
-
-.btn-action {
-    padding: 0.4rem 0.75rem;
-    font-size: 0.875rem;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.btn-action:hover {
-    transform: translateY(-2px);
-}
-
-.pagination-container {
-    background: white;
-    padding: 1.25rem;
-    border-radius: 0 0 12px 12px;
-    border-top: 1px solid #dee2e6;
-}
-
-.page-info {
-    color: #6c757d;
-    font-size: 0.9rem;
-}
-
-.description-text {
-    color: #6c757d;
+    color: #495057;
     font-size: 0.85rem;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
-
-@media (max-width: 768px) {
-    .table-responsive {
-        font-size: 0.85rem;
-    }
-    
-    .stats-number {
-        font-size: 1.5rem;
-    }
-    
-    .tax-code {
-        font-size: 0.75rem;
-        padding: 0.3rem 0.6rem;
-    }
+.tax-rate {
+    font-weight: 700;
+    color: #007bff;
+    font-size: 1rem;
+}
+.new-badge {
+    background: #6f42c1;
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+.modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.modal-header .btn-close {
+    filter: brightness(0) invert(1);
+}
+.info-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+.info-value {
+    font-size: 0.95rem;
+    color: #2c3e50;
+    font-weight: 500;
+    margin-bottom: 1rem;
 }
 </style>
 
-<!-- Content Header -->
-<div class="content-header mb-4">
+<div class="content-header">
     <div class="container-fluid">
-        <div class="row align-items-center">
+        <div class="row mb-3 align-items-center">
             <div class="col-sm-6">
-                <h1 class="m-0 fw-bold">
-                    <i class="fas fa-percentage text-primary me-2"></i>
-                    Tax Types
+                <h1 class="m-0" style="font-size: 1.5rem;">
+                    <i class="fas fa-percentage me-2"></i>Tax Types
                 </h1>
-                <p class="text-muted small mb-0 mt-1">
-                    Manage tax rates and types (<?php echo number_format($total_records); ?> total)
-                </p>
             </div>
-            <div class="col-sm-6">
-                <div class="float-sm-end">
-                    <a href="add-type.php" class="btn btn-primary">
-                        <i class="fas fa-plus-circle me-1"></i> New Tax Type
-                    </a>
-                </div>
+            <div class="col-sm-6 text-end">
+                <a href="add-type.php" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Add Tax Type
+                </a>
+                <a href="computation.php" class="btn btn-info btn-sm">
+                    <i class="fas fa-calculator me-1"></i>Tax Computation
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Main Content -->
-<section class="content">
-    <div class="container-fluid">
+<div class="container-fluid">
 
-        <!-- Success/Error Messages -->
-        <?php if (isset($_SESSION['success_message'])): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="fas fa-check-circle me-2"></i>
-            <?php echo htmlspecialchars($_SESSION['success_message']); 
-            unset($_SESSION['success_message']); ?>
+    <?php if ($error): ?>
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <?php endif; ?>
+    <?php endif; ?>
 
-        <?php if (isset($_SESSION['error_message'])): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <i class="fas fa-exclamation-circle me-2"></i>
-            <?php echo htmlspecialchars($_SESSION['error_message']); 
-            unset($_SESSION['error_message']); ?>
+    <?php if ($success): ?>
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle me-2"></i><?= htmlspecialchars($success) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <?php endif; ?>
+    <?php endif; ?>
 
-        <!-- Statistics Cards -->
-        <div class="row g-3 mb-4">
-            <div class="col-lg-4 col-md-6">
-                <div class="stats-card">
-                    <div class="stats-number"><?php echo number_format($stats['total_types']); ?></div>
-                    <div class="stats-label">Total Types</div>
-                </div>
-            </div>
-            <div class="col-lg-4 col-md-6">
-                <div class="stats-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
-                    <div class="stats-number"><?php echo number_format($stats['active_types']); ?></div>
-                    <div class="stats-label">Active Types</div>
-                </div>
-            </div>
-            <div class="col-lg-4 col-md-6">
-                <div class="stats-card" style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">
-                    <div class="stats-number"><?php echo number_format($stats['inactive_types']); ?></div>
-                    <div class="stats-label">Inactive Types</div>
-                </div>
+    <!-- Statistics -->
+    <div class="row mb-3 g-2">
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #007bff;">
+                <div class="stats-value"><?= $stats['total_types'] ?></div>
+                <div class="stats-label">Total Types</div>
             </div>
         </div>
-
-        <!-- Filters -->
-        <div class="filter-card">
-            <form method="GET" class="row g-3 align-items-end">
-                <div class="col-lg-4 col-md-6">
-                    <label class="form-label fw-semibold small">Search Tax Types</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light">
-                            <i class="fas fa-search"></i>
-                        </span>
-                        <input type="text" 
-                               name="search" 
-                               class="form-control" 
-                               placeholder="Search by code, name, description..."
-                               value="<?php echo htmlspecialchars($_GET['search'] ?? ''); ?>">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-semibold small">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="">All Status</option>
-                        <option value="1" <?php echo (isset($_GET['status']) && $_GET['status'] === '1') ? 'selected' : ''; ?>>Active</option>
-                        <option value="0" <?php echo (isset($_GET['status']) && $_GET['status'] === '0') ? 'selected' : ''; ?>>Inactive</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-semibold small">Applies To</label>
-                    <select name="applies_to" class="form-select">
-                        <option value="">All Types</option>
-                        <option value="sales" <?php echo (isset($_GET['applies_to']) && $_GET['applies_to'] === 'sales') ? 'selected' : ''; ?>>Sales</option>
-                        <option value="purchases" <?php echo (isset($_GET['applies_to']) && $_GET['applies_to'] === 'purchases') ? 'selected' : ''; ?>>Purchases</option>
-                        <option value="services" <?php echo (isset($_GET['applies_to']) && $_GET['applies_to'] === 'services') ? 'selected' : ''; ?>>Services</option>
-                        <option value="payroll" <?php echo (isset($_GET['applies_to']) && $_GET['applies_to'] === 'payroll') ? 'selected' : ''; ?>>Payroll</option>
-                        <option value="all" <?php echo (isset($_GET['applies_to']) && $_GET['applies_to'] === 'all') ? 'selected' : ''; ?>>All</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-6">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-filter me-1"></i> Filter
-                    </button>
-                </div>
-                <div class="col-lg-2 col-md-6">
-                    <?php if (!empty($_GET['search']) || !empty($_GET['status']) || !empty($_GET['applies_to'])): ?>
-                    <a href="?" class="btn btn-outline-secondary w-100">
-                        <i class="fas fa-times me-1"></i> Clear
-                    </a>
-                    <?php endif; ?>
-                </div>
-            </form>
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #28a745;">
+                <div class="stats-value"><?= $stats['active_types'] ?></div>
+                <div class="stats-label">Active</div>
+            </div>
         </div>
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #17a2b8;">
+                <div class="stats-value"><?= $stats['vat_types'] ?></div>
+                <div class="stats-label">VAT</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #ffc107;">
+                <div class="stats-value"><?= $stats['wht_types'] ?></div>
+                <div class="stats-label">Withholding</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #6f42c1;">
+                <div class="stats-value"><?= $stats['recently_added'] ?></div>
+                <div class="stats-label">New (7 Days)</div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="stats-card" style="border-left-color: #dc3545;">
+                <div class="stats-value"><?= $stats['total_types'] - $stats['active_types'] ?></div>
+                <div class="stats-label">Inactive</div>
+            </div>
+        </div>
+    </div>
 
-        <!-- Tax Types Table -->
+    <!-- Tax Types Table -->
+    <div class="table-card">
         <?php if (empty($tax_types)): ?>
-        <div class="table-container">
-            <div class="empty-state">
-                <i class="fas fa-percentage"></i>
-                <h4 class="mb-3">No Tax Types Found</h4>
-                <p class="lead mb-4">
-                    <?php if (!empty($_GET['search']) || !empty($_GET['status']) || !empty($_GET['applies_to'])): ?>
-                        No tax types match your current filters. Try adjusting your search criteria.
-                    <?php else: ?>
-                        Start by creating your first tax type for VAT, WHT, or any other tax.
-                    <?php endif; ?>
-                </p>
-                <?php if (empty($_GET['search']) && empty($_GET['status']) && empty($_GET['applies_to'])): ?>
-                <a href="add-type.php" class="btn btn-primary btn-lg">
-                    <i class="fas fa-plus-circle me-2"></i>
-                    Create First Tax Type
+            <div class="text-center py-5">
+                <i class="fas fa-percentage fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">No Tax Types Configured</h5>
+                <p class="text-muted">Start by adding your first tax type</p>
+                <a href="add-type.php" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Add Tax Type
                 </a>
-                <?php else: ?>
-                <a href="?" class="btn btn-outline-primary">
-                    <i class="fas fa-times me-1"></i> Clear Filters
-                </a>
-                <?php endif; ?>
             </div>
-        </div>
         <?php else: ?>
-        <div class="table-container">
             <div class="table-responsive">
-                <table class="table table-hover align-middle">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
-                            <th width="5%">#</th>
-                            <th width="12%">Tax Code</th>
-                            <th width="18%">Tax Name</th>
-                            <th width="8%">Rate</th>
-                            <th width="12%">Applies To</th>
-                            <th width="20%">Description</th>
-                            <?php if ($trans_table_exists): ?>
-                            <th width="12%">Transactions</th>
-                            <?php endif; ?>
-                            <th width="8%">Status</th>
-                            <th width="5%" class="text-end">Actions</th>
+                            <th style="width: 5%;">#</th>
+                            <th style="width: 10%;">Code</th>
+                            <th style="width: 20%;">Tax Name</th>
+                            <th style="width: 12%;">Category</th>
+                            <th style="width: 10%;">Rate</th>
+                            <th style="width: 13%;">Applies To</th>
+                            <th style="width: 10%;">Status</th>
+                            <th style="width: 20%;" class="text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php 
-                        $row_number = $offset + 1;
+                        $counter = 1;
                         foreach ($tax_types as $tax): 
                         ?>
                         <tr>
-                            <td class="text-muted"><?php echo $row_number++; ?></td>
+                            <td><?= $counter++ ?></td>
+                            <td><span class="tax-code"><?= htmlspecialchars($tax['tax_code']) ?></span></td>
                             <td>
-                                <span class="tax-code">
-                                    <?php echo htmlspecialchars($tax['tax_code']); ?>
-                                </span>
-                            </td>
-                            <td>
-                                <div class="tax-name">
-                                    <?php echo htmlspecialchars($tax['tax_name']); ?>
-                                </div>
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-1"></i>
-                                    <?php echo htmlspecialchars($tax['created_by_name']); ?>
-                                </small>
-                            </td>
-                            <td>
-                                <span class="tax-rate-badge">
-                                    <?php echo number_format((float)$tax['tax_rate'], 2); ?>%
-                                </span>
-                            </td>
-                            <td>
-                                <span class="applies-to-badge">
-                                    <i class="fas fa-tag me-1"></i>
-                                    <?php echo ucfirst($tax['applies_to'] ?? 'All'); ?>
-                                </span>
-                            </td>
-                            <td>
-                                <?php if (!empty($tax['description'])): ?>
-                                <span class="description-text" title="<?php echo htmlspecialchars($tax['description']); ?>">
-                                    <?php echo htmlspecialchars($tax['description']); ?>
-                                </span>
-                                <?php else: ?>
-                                <span class="text-muted">—</span>
+                                <strong><?= htmlspecialchars($tax['tax_name']) ?></strong>
+                                <?php if (isset($tax['days_old']) && $tax['days_old'] <= 7): ?>
+                                <span class="new-badge"><i class="fas fa-star"></i> NEW</span>
                                 <?php endif; ?>
                             </td>
-                            <?php if ($trans_table_exists): ?>
                             <td>
-                                <?php if (isset($trans_data[$tax['tax_type_id']])): ?>
-                                <div class="transaction-info">
-                                    <div class="count">
-                                        <i class="fas fa-receipt me-1"></i>
-                                        <?php echo number_format($trans_data[$tax['tax_type_id']]['count']); ?>
-                                    </div>
-                                    <div class="amount">
-                                        <i class="fas fa-coins me-1"></i>
-                                        TSH <?php echo number_format($trans_data[$tax['tax_type_id']]['total'], 0); ?>
-                                    </div>
-                                </div>
-                                <?php else: ?>
-                                <span class="text-muted small">No transactions</span>
-                                <?php endif; ?>
-                            </td>
-                            <?php endif; ?>
-                            <td>
-                                <span class="status-badge <?php echo $tax['is_active'] ? 'active' : 'inactive'; ?>">
-                                    <?php echo $tax['is_active'] ? 'Active' : 'Inactive'; ?>
+                                <span class="category-badge <?= $tax['tax_category'] ?>">
+                                    <?= ucfirst($tax['tax_category']) ?>
                                 </span>
                             </td>
-                            <td class="text-end">
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <a href="edit-type.php?id=<?php echo $tax['tax_type_id']; ?>" 
-                                       class="btn btn-outline-primary btn-action"
-                                       title="Edit">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    <?php if ($trans_table_exists && isset($trans_data[$tax['tax_type_id']])): ?>
-                                    <a href="transactions.php?tax_type=<?php echo $tax['tax_type_id']; ?>" 
-                                       class="btn btn-outline-info btn-action"
-                                       title="View Transactions">
-                                        <i class="fas fa-receipt"></i>
-                                    </a>
-                                    <?php endif; ?>
-                                </div>
+                            <td><span class="tax-rate"><?= number_format($tax['tax_rate'], 2) ?>%</span></td>
+                            <td><?= ucfirst($tax['applies_to']) ?></td>
+                            <td>
+                                <?php if ($tax['is_active']): ?>
+                                    <span class="badge bg-success">Active</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Inactive</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-info btn-sm" onclick='viewTax(<?= json_encode($tax, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-warning btn-sm" onclick='editTax(<?= json_encode($tax, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <a href="?toggle=1&id=<?= $tax['tax_type_id'] ?>" class="btn btn-secondary btn-sm"
+                                   onclick="return confirm('Toggle status?')">
+                                    <i class="fas fa-<?= $tax['is_active'] ? 'toggle-off' : 'toggle-on' ?>"></i>
+                                </a>
+                                <button type="button" class="btn btn-danger btn-sm" 
+                                        onclick='deleteTax(<?= $tax['tax_type_id'] ?>, <?= json_encode($tax['tax_name'], JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
-            
-            <!-- Pagination -->
-            <?php if ($total_pages > 1): ?>
-            <div class="pagination-container">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <div class="page-info">
-                            Showing <?php echo number_format($offset + 1); ?> to 
-                            <?php echo number_format(min($offset + $per_page, $total_records)); ?> 
-                            of <?php echo number_format($total_records); ?> entries
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- View Modal -->
+<div class="modal fade" id="viewTaxModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Tax Type Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="viewTaxContent"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editTaxModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Tax Type</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="tax_type_id" id="edit_tax_type_id">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Tax Name <span class="text-danger">*</span></label>
+                            <input type="text" name="tax_name" id="edit_tax_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Tax Code <span class="text-danger">*</span></label>
+                            <input type="text" name="tax_code" id="edit_tax_code" class="form-control" required>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <nav aria-label="Page navigation">
-                            <ul class="pagination pagination-sm justify-content-end mb-0">
-                                <!-- Previous -->
-                                <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
-                                    <a class="page-link" 
-                                       href="?page=<?php echo ($page - 1); ?><?php echo !empty($_GET['search']) ? '&search=' . urlencode($_GET['search']) : ''; ?><?php echo !empty($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?><?php echo !empty($_GET['applies_to']) ? '&applies_to=' . urlencode($_GET['applies_to']) : ''; ?>">
-                                        <i class="fas fa-chevron-left"></i>
-                                    </a>
-                                </li>
-                                
-                                <?php
-                                $start_page = max(1, $page - 2);
-                                $end_page = min($total_pages, $page + 2);
-                                
-                                if ($start_page > 1): ?>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page=1<?php echo !empty($_GET['search']) ? '&search=' . urlencode($_GET['search']) : ''; ?><?php echo !empty($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?><?php echo !empty($_GET['applies_to']) ? '&applies_to=' . urlencode($_GET['applies_to']) : ''; ?>">1</a>
-                                    </li>
-                                    <?php if ($start_page > 2): ?>
-                                    <li class="page-item disabled"><span class="page-link">...</span></li>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                                
-                                <?php for ($i = $start_page; $i <= $end_page; $i++): ?>
-                                <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
-                                    <a class="page-link" 
-                                       href="?page=<?php echo $i; ?><?php echo !empty($_GET['search']) ? '&search=' . urlencode($_GET['search']) : ''; ?><?php echo !empty($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?><?php echo !empty($_GET['applies_to']) ? '&applies_to=' . urlencode($_GET['applies_to']) : ''; ?>">
-                                        <?php echo $i; ?>
-                                    </a>
-                                </li>
-                                <?php endfor; ?>
-                                
-                                <?php if ($end_page < $total_pages): ?>
-                                    <?php if ($end_page < $total_pages - 1): ?>
-                                    <li class="page-item disabled"><span class="page-link">...</span></li>
-                                    <?php endif; ?>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo !empty($_GET['search']) ? '&search=' . urlencode($_GET['search']) : ''; ?><?php echo !empty($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?><?php echo !empty($_GET['applies_to']) ? '&applies_to=' . urlencode($_GET['applies_to']) : ''; ?>"><?php echo $total_pages; ?></a>
-                                    </li>
-                                <?php endif; ?>
-                                
-                                <!-- Next -->
-                                <li class="page-item <?php echo ($page >= $total_pages) ? 'disabled' : ''; ?>">
-                                    <a class="page-link" 
-                                       href="?page=<?php echo ($page + 1); ?><?php echo !empty($_GET['search']) ? '&search=' . urlencode($_GET['search']) : ''; ?><?php echo !empty($_GET['status']) ? '&status=' . urlencode($_GET['status']) : ''; ?><?php echo !empty($_GET['applies_to']) ? '&applies_to=' . urlencode($_GET['applies_to']) : ''; ?>">
-                                        <i class="fas fa-chevron-right"></i>
-                                    </a>
-                                </li>
-                            </ul>
-                        </nav>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
+                            <select name="tax_category" id="edit_tax_category" class="form-select" required>
+                                <option value="vat">VAT</option>
+                                <option value="withholding">Withholding</option>
+                                <option value="excise">Excise</option>
+                                <option value="customs">Customs</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Tax Rate (%) <span class="text-danger">*</span></label>
+                            <input type="number" name="tax_rate" id="edit_tax_rate" class="form-control" 
+                                   step="0.01" min="0" max="100" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Applies To</label>
+                            <select name="applies_to" id="edit_applies_to" class="form-select">
+                                <option value="sales">Sales</option>
+                                <option value="purchases">Purchases</option>
+                                <option value="both">Both</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Calculation Method</label>
+                            <select name="calculation_method" id="edit_calculation_method" class="form-select">
+                                <option value="percentage">Percentage</option>
+                                <option value="fixed">Fixed Amount</option>
+                                <option value="tiered">Tiered Rate</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Account Code</label>
+                            <input type="text" name="account_code" id="edit_account_code" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Description</label>
+                        <textarea name="description" id="edit_description" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="edit_is_active" value="1">
+                        <label class="form-check-label fw-bold">Active</label>
                     </div>
                 </div>
-            </div>
-            <?php endif; ?>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="edit_tax" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Save Changes
+                    </button>
+                </div>
+            </form>
         </div>
-
-        <?php if (!empty($_GET['search']) || !empty($_GET['status']) || !empty($_GET['applies_to'])): ?>
-        <div class="alert alert-info mt-3">
-            <i class="fas fa-info-circle me-2"></i>
-            Showing filtered results: <strong><?php echo number_format($total_records); ?></strong> of <strong><?php echo number_format($stats['total_types']); ?></strong> total tax types
-            <a href="?" class="btn btn-sm btn-outline-primary float-end">View All</a>
-        </div>
-        <?php endif; ?>
-
-        <?php endif; ?>
-
     </div>
-</section>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteTaxModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Delete Tax Type</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="tax_type_id" id="delete_tax_type_id">
+                    <div class="text-center py-3">
+                        <i class="fas fa-exclamation-triangle fa-4x text-warning mb-3"></i>
+                        <h5>Are you sure?</h5>
+                        <p class="text-muted mb-0" id="delete_tax_name"></p>
+                        <p class="text-danger mt-2"><small>This action cannot be undone.</small></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="delete_tax" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Add loading state to filter button
-    const filterForm = document.querySelector('form[method="GET"]');
-    const filterBtn = filterForm?.querySelector('button[type="submit"]');
-    
-    if (filterForm && filterBtn) {
-        filterForm.addEventListener('submit', function() {
-            filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Filtering...';
-            filterBtn.disabled = true;
-        });
-    }
-    
-    // Add tooltips to description cells
-    const descriptionCells = document.querySelectorAll('.description-text');
-    descriptionCells.forEach(cell => {
-        if (cell.scrollWidth > cell.clientWidth) {
-            cell.style.cursor = 'help';
-        }
-    });
-});
+function viewTax(tax) {
+    const content = `
+        <div class="row">
+            <div class="col-md-6">
+                <div class="info-label">Tax Name</div>
+                <div class="info-value">${tax.tax_name}</div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-label">Tax Code</div>
+                <div class="info-value"><code>${tax.tax_code}</code></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="info-label">Category</div>
+                <div class="info-value">
+                    <span class="category-badge ${tax.tax_category}">
+                        ${tax.tax_category.toUpperCase()}
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-label">Tax Rate</div>
+                <div class="info-value"><span class="tax-rate" style="font-size: 1.5rem;">${parseFloat(tax.tax_rate).toFixed(2)}%</span></div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-label">Status</div>
+                <div class="info-value">
+                    <span class="badge ${tax.is_active == 1 ? 'bg-success' : 'bg-secondary'}">
+                        ${tax.is_active == 1 ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="info-label">Calculation Method</div>
+                <div class="info-value">${tax.calculation_method || 'N/A'}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-label">Applies To</div>
+                <div class="info-value">${tax.applies_to || 'N/A'}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="info-label">Account Code</div>
+                <div class="info-value">${tax.account_code || 'N/A'}</div>
+            </div>
+        </div>
+        ${tax.description ? `<div class="row"><div class="col-12"><div class="info-label">Description</div><div class="info-value">${tax.description}</div></div></div>` : ''}
+        <div class="row">
+            <div class="col-md-6">
+                <div class="info-label">Created By</div>
+                <div class="info-value">${tax.created_by_name || 'System'}</div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-label">Created At</div>
+                <div class="info-value">${new Date(tax.created_at).toLocaleString()}</div>
+            </div>
+        </div>
+    `;
+    document.getElementById('viewTaxContent').innerHTML = content;
+    new bootstrap.Modal(document.getElementById('viewTaxModal')).show();
+}
+
+function editTax(tax) {
+    document.getElementById('edit_tax_type_id').value = tax.tax_type_id;
+    document.getElementById('edit_tax_name').value = tax.tax_name;
+    document.getElementById('edit_tax_code').value = tax.tax_code;
+    document.getElementById('edit_tax_category').value = tax.tax_category;
+    document.getElementById('edit_tax_rate').value = tax.tax_rate;
+    document.getElementById('edit_applies_to').value = tax.applies_to || 'both';
+    document.getElementById('edit_calculation_method').value = tax.calculation_method || 'percentage';
+    document.getElementById('edit_account_code').value = tax.account_code || '';
+    document.getElementById('edit_description').value = tax.description || '';
+    document.getElementById('edit_is_active').checked = tax.is_active == 1;
+    new bootstrap.Modal(document.getElementById('editTaxModal')).show();
+}
+
+function deleteTax(taxId, taxName) {
+    document.getElementById('delete_tax_type_id').value = taxId;
+    document.getElementById('delete_tax_name').textContent = taxName;
+    new bootstrap.Modal(document.getElementById('deleteTaxModal')).show();
+}
 </script>
 
-<?php 
-require_once '../../includes/footer.php';
-?>
+<?php require_once '../../includes/footer.php'; ?>

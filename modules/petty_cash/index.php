@@ -1,6 +1,7 @@
 <?php
 define('APP_ACCESS', true);
 session_start();
+
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 
@@ -13,184 +14,562 @@ $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
 
-// Get employee info
-$stmt = $conn->prepare("SELECT * FROM employees WHERE user_id = ? AND company_id = ? AND is_active = 1");
-$stmt->execute([$user_id, $company_id]);
-$employee = $stmt->fetch(PDO::FETCH_ASSOC);
+// ==================== FILTERS ====================
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$custodian_filter = isset($_GET['custodian_id']) ? (int)$_GET['custodian_id'] : 0;
+$category_filter = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
+$type_filter = isset($_GET['type']) ? $_GET['type'] : '';
+$date_from = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-01');
+$date_to = isset($_GET['date_to']) ? $_GET['date_to'] : date('Y-m-t');
 
-// Check if Finance
-$is_finance = isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'finance', 'super_admin']);
-
-// Statistics
-$stats = ['total_balance' => 0, 'accounts' => 0, 'pending' => 0];
+// ==================== STATISTICS ====================
 try {
-    $stmt = $conn->prepare("SELECT COUNT(*) as accounts, COALESCE(SUM(current_balance), 0) as balance 
-        FROM petty_cash_accounts WHERE company_id = ? AND status = 'active'");
-    $stmt->execute([$company_id]);
-    $row = $stmt->fetch();
-    $stats['accounts'] = $row['accounts'];
-    $stats['total_balance'] = $row['balance'];
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as total_transactions,
+            COALESCE(SUM(CASE WHEN transaction_type = 'replenishment' THEN amount ELSE 0 END), 0) as total_replenishments,
+            COALESCE(SUM(CASE WHEN transaction_type = 'expense' THEN amount ELSE 0 END), 0) as total_expenses,
+            COALESCE(SUM(CASE WHEN transaction_type = 'return' THEN amount ELSE 0 END), 0) as total_returns,
+            COALESCE(SUM(CASE 
+                WHEN transaction_type = 'replenishment' THEN amount
+                WHEN transaction_type = 'expense' THEN -amount
+                WHEN transaction_type = 'return' THEN amount
+                ELSE 0 
+            END), 0) as current_balance
+        FROM petty_cash_transactions 
+        WHERE company_id = ?
+        AND transaction_date BETWEEN ? AND ?
+    ");
+    $stmt->execute([$company_id, $date_from, $date_to]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    if ($is_finance) {
-        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM petty_cash_transactions pct
-            JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
-            WHERE pca.company_id = ? AND pct.status = 'pending' AND pct.transaction_type = 'disbursement'");
-        $stmt->execute([$company_id]);
-        $stats['pending'] = $stmt->fetch()['count'];
-    }
-} catch (Exception $e) {}
+    $stats = [
+        'total_transactions' => (int)($result['total_transactions'] ?? 0),
+        'total_replenishments' => (float)($result['total_replenishments'] ?? 0),
+        'total_expenses' => (float)($result['total_expenses'] ?? 0),
+        'total_returns' => (float)($result['total_returns'] ?? 0),
+        'current_balance' => (float)($result['current_balance'] ?? 0)
+    ];
+} catch (Exception $e) {
+    error_log("Stats error: " . $e->getMessage());
+    $stats = [
+        'total_transactions' => 0,
+        'total_replenishments' => 0,
+        'total_expenses' => 0,
+        'total_returns' => 0,
+        'current_balance' => 0
+    ];
+}
 
-// Accounts
-$accounts = [];
+// ==================== FETCH CUSTODIANS ====================
+$custodians = [];
 try {
-    $stmt = $conn->prepare("SELECT *, maximum_limit as maximum_balance FROM petty_cash_accounts WHERE company_id = ? AND status = 'active'");
-    $stmt->execute([$company_id]);
-    $accounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {}
+    $stmt = $conn->prepare("
+        SELECT DISTINCT u.user_id, u.full_name, d.department_name,
+               COUNT(pc.transaction_id) as transaction_count
+        FROM users u
+        LEFT JOIN employees e ON u.user_id = e.user_id
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        LEFT JOIN petty_cash_transactions pc ON u.user_id = pc.custodian_id AND pc.company_id = ?
+        WHERE u.company_id = ? AND u.is_active = 1
+        GROUP BY u.user_id, u.full_name, d.department_name
+        HAVING transaction_count > 0 OR u.user_id = ?
+        ORDER BY u.full_name
+    ");
+    $stmt->execute([$company_id, $company_id, $user_id]);
+    $custodians = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Custodians fetch error: " . $e->getMessage());
+}
 
-// Recent transactions
-$recent_transactions = [];
+// ==================== FETCH CATEGORIES ====================
+$categories = [];
 try {
-    $stmt = $conn->prepare("SELECT pct.*, pca.account_name, e.full_name as requester_name
-        FROM petty_cash_transactions pct
-        JOIN petty_cash_accounts pca ON pct.petty_cash_id = pca.petty_cash_id
-        LEFT JOIN employees e ON pct.requested_by = e.employee_id
-        WHERE pca.company_id = ? AND pct.status = 'approved'
-        ORDER BY pct.transaction_date DESC LIMIT 10");
-    $stmt->execute([$company_id]);
-    $recent_transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {}
+    $stmt = $conn->prepare("
+        SELECT category_id, category_name, category_code,
+               (SELECT COUNT(*) FROM petty_cash_transactions 
+                WHERE category_id = pc.category_id AND company_id = ?) as usage_count
+        FROM petty_cash_categories pc
+        WHERE company_id = ? AND is_active = 1
+        ORDER BY category_name
+    ");
+    $stmt->execute([$company_id, $company_id]);
+    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Categories fetch error: " . $e->getMessage());
+}
+
+// ==================== BUILD QUERY ====================
+$where_conditions = ["pc.company_id = ?"];
+$params = [$company_id];
+
+if ($search) {
+    $where_conditions[] = "(pc.reference_number LIKE ? OR pc.description LIKE ? OR pc.payee LIKE ?)";
+    $search_param = "%$search%";
+    $params[] = $search_param;
+    $params[] = $search_param;
+    $params[] = $search_param;
+}
+
+if ($custodian_filter) {
+    $where_conditions[] = "pc.custodian_id = ?";
+    $params[] = $custodian_filter;
+}
+
+if ($category_filter) {
+    $where_conditions[] = "pc.category_id = ?";
+    $params[] = $category_filter;
+}
+
+if ($type_filter) {
+    $where_conditions[] = "pc.transaction_type = ?";
+    $params[] = $type_filter;
+}
+
+$where_conditions[] = "pc.transaction_date BETWEEN ? AND ?";
+$params[] = $date_from;
+$params[] = $date_to;
+
+$where_clause = implode(' AND ', $where_conditions);
+
+// ==================== FETCH TRANSACTIONS ====================
+$transactions = [];
+try {
+    $stmt = $conn->prepare("
+        SELECT 
+            pc.*,
+            c.category_name,
+            c.category_code,
+            u.full_name as custodian_name,
+            created_user.full_name as created_by_name,
+            approved_user.full_name as approved_by_name
+        FROM petty_cash_transactions pc
+        LEFT JOIN petty_cash_categories c ON pc.category_id = c.category_id
+        LEFT JOIN users u ON pc.custodian_id = u.user_id
+        LEFT JOIN users created_user ON pc.created_by = created_user.user_id
+        LEFT JOIN users approved_user ON pc.approved_by = approved_user.user_id
+        WHERE $where_clause
+        ORDER BY pc.transaction_date DESC, pc.created_at DESC
+        LIMIT 500
+    ");
+    $stmt->execute($params);
+    $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Transactions fetch error: " . $e->getMessage());
+}
 
 $page_title = 'Petty Cash Management';
 require_once '../../includes/header.php';
 ?>
 
 <style>
-.stats-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,0.08);border-left:4px solid;transition:transform .2s}
-.stats-card:hover{transform:translateY(-4px)}
-.stats-card.primary{border-left-color:#007bff}.stats-card.success{border-left-color:#28a745}
-.stats-card.warning{border-left-color:#ffc107}
-.stats-number{font-size:2rem;font-weight:700;color:#2c3e50}
-.stats-label{color:#6c757d;font-size:.875rem;font-weight:500}
-.action-card{background:white;border-radius:12px;padding:2rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all .3s;text-decoration:none;color:inherit;display:block}
-.action-card:hover{transform:translateY(-5px);box-shadow:0 8px 25px rgba(0,0,0,0.15)}
-.action-card i{font-size:2.5rem;color:#007bff;margin-bottom:1rem}
-.table-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
-.account-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,0.08);border-left:4px solid #28a745;margin-bottom:1rem}
-.account-card.low{border-left-color:#dc3545}
-.balance-display{font-size:1.5rem;font-weight:700;color:#28a745}
-.balance-display.low{color:#dc3545}
+.stats-card {
+    background: #fff;
+    border-radius: 6px;
+    padding: 0.875rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 3px solid #007bff;
+    height: 100%;
+}
+
+.stats-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+}
+
+.stats-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.filter-card {
+    background: #fff;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.table-container {
+    background: #fff;
+    border-radius: 6px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.transaction-table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+.transaction-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+}
+
+.transaction-table td {
+    padding: 0.6rem 0.5rem;
+    vertical-align: middle;
+}
+
+.transaction-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.type-badge {
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.type-badge.replenishment {
+    background: #d4edda;
+    color: #155724;
+}
+
+.type-badge.expense {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.type-badge.return {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.amount-positive {
+    color: #28a745;
+    font-weight: 700;
+}
+
+.amount-negative {
+    color: #dc3545;
+    font-weight: 700;
+}
+
+.amount-neutral {
+    color: #17a2b8;
+    font-weight: 700;
+}
+
+.reference-number {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #495057;
+}
+
+.btn-action {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 3px;
+}
+
+.quick-actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .stats-value {
+        font-size: 1.25rem;
+    }
+    
+    .filter-card .row {
+        row-gap: 0.5rem;
+    }
+}
 </style>
 
-<div class="content-header mb-4">
+<div class="content-header">
     <div class="container-fluid">
-        <div class="row align-items-center">
-            <div class="col-sm-6"><h1 class="m-0 fw-bold"><i class="fas fa-wallet me-2"></i>Petty Cash</h1></div>
+        <div class="row mb-3 align-items-center">
+            <div class="col-sm-6">
+                <h1 class="m-0" style="font-size: 1.5rem;">
+                    <i class="fas fa-wallet me-2"></i>Petty Cash Management
+                </h1>
+            </div>
             <div class="col-sm-6 text-end">
-                <a href="request.php" class="btn btn-primary"><i class="fas fa-plus-circle me-1"></i> Request Cash</a>
+                <a href="add.php" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>New Transaction
+                </a>
+                <a href="reconciliation.php" class="btn btn-info btn-sm">
+                    <i class="fas fa-balance-scale me-1"></i>Reconciliation
+                </a>
             </div>
         </div>
     </div>
 </div>
 
 <div class="container-fluid">
-    <?php if (isset($_SESSION['success_message'])): ?>
-    <div class="alert alert-success alert-dismissible fade show"><?= $_SESSION['success_message']; unset($_SESSION['success_message']); ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <?php endif; ?>
 
-    <div class="row g-3 mb-4">
-        <div class="col-lg-4 col-6">
-            <div class="stats-card primary">
-                <div class="stats-number">TSH <?= number_format($stats['total_balance']) ?></div>
-                <div class="stats-label">Total Balance</div>
+    <!-- Statistics -->
+    <div class="row mb-3 g-2">
+        <div class="col-md-3 col-6">
+            <div class="stats-card" style="border-left-color: #007bff;">
+                <div class="stats-value"><?= $stats['total_transactions'] ?></div>
+                <div class="stats-label">Total Transactions</div>
             </div>
         </div>
-        <div class="col-lg-4 col-6">
-            <div class="stats-card success">
-                <div class="stats-number"><?= $stats['accounts'] ?></div>
-                <div class="stats-label">Active Accounts</div>
+        <div class="col-md-3 col-6">
+            <div class="stats-card" style="border-left-color: #28a745;">
+                <div class="stats-value"><?= number_format($stats['total_replenishments'], 0) ?></div>
+                <div class="stats-label">Replenishments (TSH)</div>
             </div>
         </div>
-        <?php if ($is_finance): ?>
-        <div class="col-lg-4 col-6">
-            <div class="stats-card warning">
-                <div class="stats-number"><?= $stats['pending'] ?></div>
-                <div class="stats-label">Pending Requests</div>
+        <div class="col-md-3 col-6">
+            <div class="stats-card" style="border-left-color: #dc3545;">
+                <div class="stats-value"><?= number_format($stats['total_expenses'], 0) ?></div>
+                <div class="stats-label">Expenses (TSH)</div>
             </div>
         </div>
-        <?php endif; ?>
+        <div class="col-md-3 col-6">
+            <div class="stats-card" style="border-left-color: #17a2b8;">
+                <div class="stats-value"><?= number_format($stats['current_balance'], 0) ?></div>
+                <div class="stats-label">Current Balance (TSH)</div>
+            </div>
+        </div>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-3"><a href="request.php" class="action-card"><i class="fas fa-hand-holding-usd"></i><h5>Request Cash</h5><p class="text-muted small mb-0">Submit expense request</p></a></div>
-        <?php if ($is_finance): ?>
-        <div class="col-md-3"><a href="approvals.php" class="action-card"><i class="fas fa-clipboard-check"></i><h5>Approvals</h5><p class="text-muted small mb-0">Review requests</p></a></div>
-        <div class="col-md-3"><a href="process.php" class="action-card" onclick="event.preventDefault();window.location='approvals.php';"><i class="fas fa-stream"></i><h5>Process Queue</h5><p class="text-muted small mb-0">Open approvals list</p></a></div>
-        <?php endif; ?>
-    </div>
-
-    <div class="row">
-        <div class="col-lg-6">
-            <h5 class="mb-3"><i class="fas fa-wallet me-2"></i>Cash Accounts</h5>
-            <?php if (empty($accounts)): ?>
-            <div class="alert alert-info">No petty cash accounts set up yet.</div>
-            <?php else: ?>
-            <?php foreach ($accounts as $acc): 
-                $percent = $acc['maximum_balance'] > 0 ? ($acc['current_balance'] / $acc['maximum_balance']) * 100 : 0;
-                $is_low = $percent < 20;
-            ?>
-            <div class="account-card <?= $is_low ? 'low' : '' ?>">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="mb-0"><?= htmlspecialchars($acc['account_name']) ?></h6>
-                        <small class="text-muted"><?= htmlspecialchars($acc['account_code'] ?? '') ?></small>
-                    </div>
-                    <span class="balance-display <?= $is_low ? 'low' : '' ?>">TSH <?= number_format($acc['current_balance']) ?></span>
+    <!-- Filters -->
+    <div class="filter-card">
+        <form method="GET" id="filterForm">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">Search</label>
+                    <input type="text" name="search" class="form-control form-control-sm" 
+                           placeholder="Reference, description, payee..." value="<?= htmlspecialchars($search) ?>">
                 </div>
-                <div class="progress" style="height:8px">
-                    <div class="progress-bar <?= $is_low ? 'bg-danger' : 'bg-success' ?>" style="width:<?= $percent ?>%"></div>
+                
+                <div class="col-md-2">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">Custodian</label>
+                    <select name="custodian_id" class="form-select form-select-sm">
+                        <option value="">All Custodians</option>
+                        <?php foreach ($custodians as $custodian): ?>
+                        <option value="<?= $custodian['user_id'] ?>" <?= $custodian_filter == $custodian['user_id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($custodian['full_name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <small class="text-muted">of TSH <?= number_format($acc['maximum_balance']) ?></small>
+                
+                <div class="col-md-2">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">Category</label>
+                    <select name="category_id" class="form-select form-select-sm">
+                        <option value="">All Categories</option>
+                        <?php foreach ($categories as $category): ?>
+                        <option value="<?= $category['category_id'] ?>" <?= $category_filter == $category['category_id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($category['category_name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">Type</label>
+                    <select name="type" class="form-select form-select-sm">
+                        <option value="">All Types</option>
+                        <option value="replenishment" <?= $type_filter == 'replenishment' ? 'selected' : '' ?>>Replenishment</option>
+                        <option value="expense" <?= $type_filter == 'expense' ? 'selected' : '' ?>>Expense</option>
+                        <option value="return" <?= $type_filter == 'return' ? 'selected' : '' ?>>Return</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-1">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">From</label>
+                    <input type="date" name="date_from" class="form-control form-control-sm" 
+                           value="<?= $date_from ?>">
+                </div>
+                
+                <div class="col-md-1">
+                    <label class="form-label" style="font-size: 0.85rem; font-weight: 600;">To</label>
+                    <input type="date" name="date_to" class="form-control form-control-sm" 
+                           value="<?= $date_to ?>">
+                </div>
+                
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                </div>
             </div>
-            <?php endforeach; ?>
-            <?php endif; ?>
+        </form>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="table-container">
+        <div class="table-responsive">
+            <table class="table table-hover transaction-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Type</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Payee/From</th>
+                        <th>Custodian</th>
+                        <th class="text-end">Amount</th>
+                        <th>Status</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($transactions)): ?>
+                    <tr>
+                        <td colspan="10" class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3 d-block"></i>
+                            <p class="text-muted mb-0">No transactions found</p>
+                            <small class="text-muted">Try adjusting your filters or add a new transaction</small>
+                        </td>
+                    </tr>
+                    <?php else: ?>
+                        <?php foreach ($transactions as $txn): ?>
+                        <tr>
+                            <td style="white-space: nowrap;">
+                                <?= date('d M Y', strtotime($txn['transaction_date'])) ?>
+                            </td>
+                            <td>
+                                <span class="reference-number"><?= htmlspecialchars($txn['reference_number']) ?></span>
+                            </td>
+                            <td>
+                                <span class="type-badge <?= $txn['transaction_type'] ?>">
+                                    <?= ucfirst($txn['transaction_type']) ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php if ($txn['category_name']): ?>
+                                    <small><?= htmlspecialchars($txn['category_name']) ?></small>
+                                <?php else: ?>
+                                    <span class="text-muted">-</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?= htmlspecialchars($txn['description']) ?>
+                                </div>
+                            </td>
+                            <td>
+                                <?= htmlspecialchars($txn['payee'] ?: '-') ?>
+                            </td>
+                            <td>
+                                <small><?= htmlspecialchars($txn['custodian_name']) ?></small>
+                            </td>
+                            <td class="text-end">
+                                <?php
+                                $amount_class = 'amount-neutral';
+                                $amount_sign = '';
+                                if ($txn['transaction_type'] == 'replenishment') {
+                                    $amount_class = 'amount-positive';
+                                    $amount_sign = '+';
+                                } elseif ($txn['transaction_type'] == 'expense') {
+                                    $amount_class = 'amount-negative';
+                                    $amount_sign = '-';
+                                } elseif ($txn['transaction_type'] == 'return') {
+                                    $amount_class = 'amount-positive';
+                                    $amount_sign = '+';
+                                }
+                                ?>
+                                <span class="<?= $amount_class ?>">
+                                    <?= $amount_sign ?><?= number_format($txn['amount'], 2) ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge <?= $txn['approval_status'] ?>">
+                                    <?= ucfirst($txn['approval_status']) ?>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="quick-actions">
+                                    <a href="view.php?id=<?= $txn['transaction_id'] ?>" 
+                                       class="btn btn-info btn-action" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <?php if ($txn['approval_status'] == 'pending'): ?>
+                                    <a href="edit.php?id=<?= $txn['transaction_id'] ?>" 
+                                       class="btn btn-warning btn-action" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <?php endif; ?>
+                                    <?php if ($txn['receipt_path']): ?>
+                                    <a href="<?= htmlspecialchars($txn['receipt_path']) ?>" 
+                                       target="_blank" class="btn btn-secondary btn-action" title="View Receipt">
+                                        <i class="fas fa-file-invoice"></i>
+                                    </a>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+                <?php if (!empty($transactions)): ?>
+                <tfoot>
+                    <tr style="background: #f8f9fa; font-weight: 700;">
+                        <td colspan="7" class="text-end">Summary for Period:</td>
+                        <td class="text-end">
+                            <div class="amount-positive">+<?= number_format($stats['total_replenishments'], 2) ?></div>
+                            <div class="amount-negative">-<?= number_format($stats['total_expenses'], 2) ?></div>
+                            <div style="border-top: 2px solid #dee2e6; margin-top: 0.25rem; padding-top: 0.25rem;">
+                                <?= number_format($stats['current_balance'], 2) ?>
+                            </div>
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+                <?php endif; ?>
+            </table>
         </div>
         
-        <div class="col-lg-6">
-            <div class="table-card">
-                <h5 class="mb-3"><i class="fas fa-history me-2"></i>Recent Transactions</h5>
-                <?php if (empty($recent_transactions)): ?>
-                <p class="text-muted text-center py-4">No transactions yet.</p>
-                <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm">
-                        <thead class="table-light"><tr><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-                        <tbody>
-                            <?php foreach ($recent_transactions as $txn): ?>
-                            <tr>
-                                <td>
-                                    <?php if ($txn['transaction_type'] === 'REPLENISHMENT'): ?>
-                                    <i class="fas fa-arrow-down text-success me-1"></i>
-                                    <?php else: ?>
-                                    <i class="fas fa-arrow-up text-danger me-1"></i>
-                                    <?php endif; ?>
-                                    <?= htmlspecialchars($txn['description']) ?>
-                                </td>
-                                <td class="<?= $txn['transaction_type'] === 'REPLENISHMENT' ? 'text-success' : 'text-danger' ?>">
-                                    <?= $txn['transaction_type'] === 'REPLENISHMENT' ? '+' : '-' ?>TSH <?= number_format($txn['amount']) ?>
-                                </td>
-                                <td><?= date('M d', strtotime($txn['transaction_date'])) ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <?php endif; ?>
-            </div>
+        <?php if (!empty($transactions)): ?>
+        <div class="mt-3 text-muted" style="font-size: 0.75rem;">
+            <i class="fas fa-info-circle me-1"></i>
+            Showing <?= count($transactions) ?> transaction(s) from <?= date('d M Y', strtotime($date_from)) ?> 
+            to <?= date('d M Y', strtotime($date_to)) ?>
         </div>
+        <?php endif; ?>
     </div>
+
 </div>
 
 <?php require_once '../../includes/footer.php'; ?>

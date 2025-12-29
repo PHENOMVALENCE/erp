@@ -1,7 +1,6 @@
 <?php
 define('APP_ACCESS', true);
 session_start();
-
 require_once '../../config/database.php';
 require_once '../../config/auth.php';
 
@@ -11,18 +10,21 @@ $auth->requireLogin();
 $db = Database::getInstance();
 $db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
+
+// CRITICAL FIX: Set the current user for all triggers
+$user_id = $_SESSION['user_id'] ?? 0;
+$conn->exec("SET @current_user_id = " . (int)$user_id);
+
 $company_id = $_SESSION['company_id'];
 
 // Get plot ID from URL
 $plot_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
 if (!$plot_id) {
     $_SESSION['error'] = "Invalid plot ID";
     header('Location: index.php');
     exit;
 }
 
-// Initialize variables
 $errors = [];
 $success = '';
 $plot = null;
@@ -30,14 +32,14 @@ $projects = [];
 
 // ==================== FETCH PLOT DATA ====================
 try {
-    $plot_sql = "SELECT p.*, pr.project_name, pr.project_code 
+    $plot_sql = "SELECT p.*, pr.project_name, pr.project_code
                  FROM plots p
                  LEFT JOIN projects pr ON p.project_id = pr.project_id
                  WHERE p.plot_id = ? AND p.company_id = ?";
     $plot_stmt = $conn->prepare($plot_sql);
     $plot_stmt->execute([$plot_id, $company_id]);
     $plot = $plot_stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if (!$plot) {
         $_SESSION['error'] = "Plot not found";
         header('Location: index.php');
@@ -52,14 +54,14 @@ try {
 
 // ==================== FETCH PROJECTS ====================
 try {
-    $projects_sql = "SELECT project_id, project_name, project_code, 
-                     total_area, selling_price_per_sqm, total_plots,
-                     COALESCE((SELECT COUNT(*) FROM plots WHERE project_id = projects.project_id), 0) as created_plots
-                     FROM projects 
-                     WHERE company_id = ? AND is_active = 1 
+    $projects_sql = "SELECT project_id, project_name, project_code,
+                            total_area, selling_price_per_sqm, total_plots,
+                            COALESCE((SELECT COUNT(*) FROM plots WHERE project_id = projects.project_id AND company_id = ?), 0) as created_plots
+                     FROM projects
+                     WHERE company_id = ? AND is_active = 1
                      ORDER BY project_name";
     $projects_stmt = $conn->prepare($projects_sql);
-    $projects_stmt->execute([$company_id]);
+    $projects_stmt->execute([$company_id, $company_id]);
     $projects = $projects_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Error fetching projects: " . $e->getMessage());
@@ -68,68 +70,54 @@ try {
 
 // ==================== HANDLE FORM SUBMISSION ====================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Validate required fields
-    if (empty($_POST['project_id'])) {
-        $errors[] = "Project is required";
-    }
-    if (empty($_POST['plot_number'])) {
-        $errors[] = "Plot number is required";
-    }
-    if (empty($_POST['area'])) {
-        $errors[] = "Plot area is required";
-    }
-    if (empty($_POST['selling_price'])) {
-        $errors[] = "Selling price is required";
-    }
+    $errors = [];
 
-    // Check for duplicate plot number (excluding current plot)
-    if (!empty($_POST['project_id']) && !empty($_POST['plot_number'])) {
+    // Validation
+    if (empty($_POST['project_id'])) $errors[] = "Project is required";
+    if (empty($_POST['plot_number'])) $errors[] = "Plot number is required";
+    if (empty($_POST['area']) || !is_numeric($_POST['area']) || $_POST['area'] <= 0) $errors[] = "Valid plot area is required";
+    if (empty($_POST['price_per_sqm']) || !is_numeric($_POST['price_per_sqm']) || $_POST['price_per_sqm'] <= 0) $errors[] = "Valid price per m² is required";
+
+    // Check duplicate plot number in same project
+    if (empty($errors)) {
         $check_sql = "SELECT COUNT(*) FROM plots 
                       WHERE project_id = ? AND plot_number = ? 
                       AND plot_id != ? AND company_id = ?";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->execute([
-            $_POST['project_id'], 
-            $_POST['plot_number'], 
-            $plot_id, 
+            $_POST['project_id'],
+            trim($_POST['plot_number']),
+            $plot_id,
             $company_id
         ]);
-        
         if ($check_stmt->fetchColumn() > 0) {
             $errors[] = "Plot number already exists in this project";
         }
     }
 
-    // Validate that plot is not sold before allowing status change
+    // Prevent status change on sold plots with active reservation
     if ($plot['status'] === 'sold' && isset($_POST['status']) && $_POST['status'] !== 'sold') {
-        // Check if there are active reservations
-        $reservation_check_sql = "SELECT COUNT(*) FROM reservations 
-                                  WHERE plot_id = ? AND company_id = ? 
-                                  AND status IN ('active', 'completed')";
-        $reservation_check_stmt = $conn->prepare($reservation_check_sql);
-        $reservation_check_stmt->execute([$plot_id, $company_id]);
-        
-        if ($reservation_check_stmt->fetchColumn() > 0) {
-            $errors[] = "Cannot change status of a sold plot with active reservations";
+        $res_check = $conn->prepare("SELECT COUNT(*) FROM reservations 
+                                     WHERE plot_id = ? AND company_id = ? 
+                                     AND status IN ('active', 'completed')");
+        $res_check->execute([$plot_id, $company_id]);
+        if ($res_check->fetchColumn() > 0) {
+            $errors[] = "Cannot change status of a sold plot with active reservation";
         }
     }
 
-    // If no errors, proceed with update
     if (empty($errors)) {
         try {
             $conn->beginTransaction();
 
-            // Store old project_id for later comparison
             $old_project_id = $plot['project_id'];
-            $new_project_id = $_POST['project_id'];
+            $new_project_id = (int)$_POST['project_id'];
 
-            // Calculate prices
             $area = floatval($_POST['area']);
             $price_per_sqm = floatval($_POST['price_per_sqm']);
-            $selling_price = floatval($_POST['selling_price']);
+            $selling_price = $area * $price_per_sqm;
             $discount_amount = floatval($_POST['discount_amount'] ?? 0);
 
-            // Update plot
             $update_sql = "UPDATE plots SET
                 project_id = ?,
                 plot_number = ?,
@@ -151,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_stmt = $conn->prepare($update_sql);
             $update_stmt->execute([
                 $new_project_id,
-                $_POST['plot_number'],
+                trim($_POST['plot_number']),
                 $_POST['block_number'] ?? null,
                 $area,
                 $price_per_sqm,
@@ -168,79 +156,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $company_id
             ]);
 
-            // Update project plot counts for old project if project changed
-            if ($old_project_id != $new_project_id && $old_project_id) {
-                $update_old_project_sql = "UPDATE projects 
-                                           SET available_plots = (
-                                               SELECT COUNT(*) FROM plots 
-                                               WHERE project_id = ? AND status = 'available'
-                                           ),
-                                           reserved_plots = (
-                                               SELECT COUNT(*) FROM plots 
-                                               WHERE project_id = ? AND status = 'reserved'
-                                           ),
-                                           sold_plots = (
-                                               SELECT COUNT(*) FROM plots 
-                                               WHERE project_id = ? AND status = 'sold'
-                                           )
-                                           WHERE project_id = ? AND company_id = ?";
-                
-                $update_old_stmt = $conn->prepare($update_old_project_sql);
-                $update_old_stmt->execute([
-                    $old_project_id,
-                    $old_project_id,
-                    $old_project_id,
-                    $old_project_id,
-                    $company_id
-                ]);
-            }
+            // Update project counters
+            $update_project_counts = function($proj_id) use ($conn, $company_id) {
+                $sql = "UPDATE projects SET
+                    available_plots = (SELECT COUNT(*) FROM plots WHERE project_id = ? AND company_id = ? AND status = 'available'),
+                    reserved_plots = (SELECT COUNT(*) FROM plots WHERE project_id = ? AND company_id = ? AND status = 'reserved'),
+                    sold_plots = (SELECT COUNT(*) FROM plots WHERE project_id = ? AND company_id = ? AND status = 'sold')
+                    WHERE project_id = ? AND company_id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->execute([$proj_id, $company_id, $proj_id, $company_id, $proj_id, $company_id, $proj_id, $company_id]);
+            };
 
-            // Update project plot counts for new project
-            $update_new_project_sql = "UPDATE projects 
-                                       SET available_plots = (
-                                           SELECT COUNT(*) FROM plots 
-                                           WHERE project_id = ? AND status = 'available'
-                                       ),
-                                       reserved_plots = (
-                                           SELECT COUNT(*) FROM plots 
-                                           WHERE project_id = ? AND status = 'reserved'
-                                       ),
-                                       sold_plots = (
-                                           SELECT COUNT(*) FROM plots 
-                                           WHERE project_id = ? AND status = 'sold'
-                                       )
-                                       WHERE project_id = ? AND company_id = ?";
-            
-            $update_new_stmt = $conn->prepare($update_new_project_sql);
-            $update_new_stmt->execute([
-                $new_project_id,
-                $new_project_id,
-                $new_project_id,
-                $new_project_id,
-                $company_id
-            ]);
+            if ($old_project_id != $new_project_id) {
+                $update_project_counts($old_project_id);
+            }
+            $update_project_counts($new_project_id);
 
             $conn->commit();
-            $success = "Plot updated successfully!";
-            
-            // Refresh plot data
-            $plot_stmt->execute([$plot_id, $company_id]);
-            $plot = $plot_stmt->fetch(PDO::FETCH_ASSOC);
-            
-            // Redirect after 2 seconds
-            header("refresh:2;url=view.php?id=" . $plot_id);
-        } catch (PDOException $e) {
+            $success = "Plot updated successfully! Redirecting...";
+            header("refresh:2;url=view.php?id=$plot_id");
+        } catch (Exception $e) {
             $conn->rollBack();
-            error_log("Error updating plot: " . $e->getMessage());
-            $errors[] = "Database error: " . $e->getMessage();
+            error_log("Update failed: " . $e->getMessage());
+            $errors[] = "Failed to update plot. Please try again.";
         }
     }
 }
 
-$page_title = 'Edit Plot - ' . htmlspecialchars($plot['plot_number']);
+$page_title = 'Edit Plot - ' . htmlspecialchars($plot['plot_number'] ?? 'Unknown');
 require_once '../../includes/header.php';
 ?>
-
 <style>
 .form-section {
     background: #fff;

@@ -16,29 +16,44 @@ $company_id = $_SESSION['company_id'];
 // Get employee ID from URL
 $employee_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-if ($employee_id <= 0) {
+if (!$employee_id) {
     $_SESSION['error_message'] = "Invalid employee ID";
-    header('Location: employees.php');
+    header('Location: index.php');
     exit;
 }
 
-// Fetch employee data
-$employee = null;
+// Fetch employee details
 try {
     $query = "
         SELECT 
             e.*,
-            u.username, u.email, u.first_name, u.middle_name, u.last_name,
-            u.phone1, u.phone2, u.gender, u.date_of_birth, u.national_id,
-            u.region, u.district, u.ward, u.village, u.street_address,
+            u.full_name,
+            u.first_name,
+            u.middle_name,
+            u.last_name,
+            u.email,
+            u.phone1,
+            u.phone2,
+            u.profile_picture,
+            u.gender,
+            u.date_of_birth,
+            u.national_id,
+            u.region,
+            u.district,
+            u.ward,
+            u.village,
+            u.street_address,
             d.department_name,
             p.position_title,
-            u.created_at as user_created_at,
-            e.created_at
+            creator.full_name as created_by_name,
+            TIMESTAMPDIFF(YEAR, e.hire_date, CURDATE()) as years_of_service,
+            TIMESTAMPDIFF(MONTH, e.hire_date, CURDATE()) as months_of_service,
+            DATEDIFF(CURDATE(), e.hire_date) as days_of_service
         FROM employees e
-        LEFT JOIN users u ON e.user_id = u.user_id
+        INNER JOIN users u ON e.user_id = u.user_id
         LEFT JOIN departments d ON e.department_id = d.department_id
         LEFT JOIN positions p ON e.position_id = p.position_id
+        LEFT JOIN users creator ON e.created_by = creator.user_id
         WHERE e.employee_id = ? AND e.company_id = ?
     ";
     
@@ -48,46 +63,29 @@ try {
     
     if (!$employee) {
         $_SESSION['error_message'] = "Employee not found";
-        header('Location: employees.php');
+        header('Location: index.php');
         exit;
     }
     
 } catch (PDOException $e) {
     error_log("Error fetching employee: " . $e->getMessage());
-    $_SESSION['error_message'] = "Error loading employee data";
-    header('Location: employees.php');
+    $_SESSION['error_message'] = "Error loading employee details";
+    header('Location: index.php');
     exit;
 }
 
-// Fetch recent payroll (last 3 months)
-$recent_payrolls = [];
-try {
-    $payroll_query = "
-        SELECT 
-            p.payroll_month, p.payroll_year, pd.basic_salary, pd.allowances, pd.gross_salary as total_salary, 
-            p.payment_date, p.status
-        FROM payroll p
-        INNER JOIN payroll_details pd ON p.payroll_id = pd.payroll_id
-        WHERE pd.employee_id = ? 
-        AND (p.payroll_year > YEAR(DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) 
-             OR (p.payroll_year = YEAR(DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) 
-                 AND p.payroll_month >= MONTH(DATE_SUB(CURDATE(), INTERVAL 3 MONTH))))
-        ORDER BY p.payroll_year DESC, p.payroll_month DESC
-    ";
-    $stmt = $conn->prepare($payroll_query);
-    $stmt->execute([$employee_id]);
-    $recent_payrolls = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    error_log("Error fetching payroll: " . $e->getMessage());
+// Calculate age if date of birth is available
+$age = null;
+if (!empty($employee['date_of_birth'])) {
+    $dob = new DateTime($employee['date_of_birth']);
+    $now = new DateTime();
+    $age = $dob->diff($now)->y;
 }
 
-// Calculate tenure
-$hire_date = new DateTime($employee['hire_date']);
-$today = new DateTime();
-$tenure = $today->diff($hire_date);
-$tenure_text = $tenure->y . ' years, ' . $tenure->m . ' months';
+// Calculate total salary
+$total_salary = ($employee['basic_salary'] ?? 0) + ($employee['allowances'] ?? 0);
 
-$page_title = 'View Employee - ' . ($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '');
+$page_title = 'View Employee - ' . htmlspecialchars($employee['full_name']);
 require_once '../../includes/header.php';
 ?>
 
@@ -95,166 +93,171 @@ require_once '../../includes/header.php';
 .employee-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    border-radius: 20px;
-    padding: 2.5rem;
+    border-radius: 12px;
+    padding: 2rem;
     margin-bottom: 2rem;
-    position: relative;
-    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
 }
 
-.employee-avatar {
+.employee-photo-large {
     width: 120px;
     height: 120px;
     border-radius: 50%;
-    border: 5px solid rgba(255,255,255,0.2);
     object-fit: cover;
-    margin-bottom: 1.5rem;
-}
-
-.employee-name {
-    font-size: 2.2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    line-height: 1.2;
-}
-
-.employee-title {
-    font-size: 1.1rem;
-    opacity: 0.9;
-    margin-bottom: 0.25rem;
-}
-
-.employee-id {
-    background: rgba(255,255,255,0.2);
-    padding: 0.5rem 1rem;
-    border-radius: 25px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    display: inline-block;
+    border: 4px solid white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .info-card {
     background: white;
-    border-radius: 16px;
-    padding: 1.75rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    border: 1px solid #e9ecef;
-    transition: all 0.3s ease;
+    border-radius: 12px;
+    padding: 1.5rem;
     margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 4px solid #007bff;
 }
 
-.info-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+.info-card h5 {
+    color: #007bff;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+}
+
+.info-card h5 i {
+    margin-right: 0.5rem;
+}
+
+.info-row {
+    display: flex;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.info-row:last-child {
+    border-bottom: none;
 }
 
 .info-label {
     font-weight: 600;
-    color: #6c757d;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 0.5rem;
+    color: #495057;
+    min-width: 200px;
 }
 
 .info-value {
-    font-size: 1.1rem;
-    font-weight: 500;
     color: #212529;
+    flex: 1;
 }
 
 .status-badge {
-    padding: 0.6rem 1.2rem;
-    border-radius: 25px;
-    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
     font-size: 0.85rem;
+    font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
 }
 
-.status-active {
-    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+.status-badge.active {
+    background: #d4edda;
     color: #155724;
+    border: 1px solid #c3e6cb;
 }
 
-.status-inactive {
-    background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+.status-badge.terminated, .status-badge.resigned {
+    background: #f8d7da;
     color: #721c24;
+    border: 1px solid #f5c6cb;
 }
 
-.salary-card {
+.status-badge.suspended {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+.employment-type-badge {
+    background: #e7f3ff;
+    color: #0066cc;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.salary-box {
     background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
     color: white;
-    border-radius: 16px;
-    padding: 2rem;
+    border-radius: 12px;
+    padding: 1.5rem;
     text-align: center;
+    margin-bottom: 1rem;
 }
 
 .salary-amount {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: 700;
-    margin-bottom: 0.5rem;
+    margin: 0.5rem 0;
 }
 
-.salary-breakdown {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-top: 1.5rem;
+.salary-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
 }
 
-.salary-item {
-    background: rgba(255,255,255,0.1);
-    padding: 1rem;
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
-}
-
-.payroll-table {
-    background: white;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-
-.payroll-table th {
+.service-box {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    font-weight: 600;
-    padding: 1.2rem 1rem;
-    border: none;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
 }
 
-.payroll-table td {
+.service-years {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.stat-box {
+    background: white;
+    border-radius: 8px;
     padding: 1rem;
-    vertical-align: middle;
-    border-color: #f8f9fa;
+    text-align: center;
+    border: 2px solid #e9ecef;
 }
 
-.action-buttons .btn {
-    margin: 0 0.25rem;
-    border-radius: 10px;
-    padding: 0.5rem 1rem;
-    font-weight: 600;
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #007bff;
 }
 
-.btn-group-sm .btn {
-    padding: 0.375rem 0.75rem;
+.stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
 }
 
-@media (max-width: 768px) {
-    .employee-header {
-        padding: 1.5rem;
-        text-align: center;
-    }
-    
-    .employee-avatar {
-        width: 100px;
-        height: 100px;
-        margin: 0 auto 1rem;
-    }
-    
-    .employee-name {
-        font-size: 1.8rem;
+.empty-value {
+    color: #adb5bd;
+    font-style: italic;
+}
+
+@media print {
+    .action-buttons, .btn, .content-header {
+        display: none !important;
     }
 }
 </style>
@@ -264,30 +267,25 @@ require_once '../../includes/header.php';
     <div class="container-fluid">
         <div class="row align-items-center">
             <div class="col-sm-6">
-                <h1 class="m-0 fw-bold text-primary">
-                    <i class="fas fa-user me-2"></i>
-                    Employee Profile
+                <h1 class="m-0 fw-bold">
+                    <i class="fas fa-user text-primary me-2"></i>
+                    Employee Details
                 </h1>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="employees.php">Employees</a></li>
-                        <li class="breadcrumb-item active" aria-current="page"><?php echo htmlspecialchars(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')); ?></li>
-                    </ol>
-                </nav>
+                <p class="text-muted small mb-0 mt-1">
+                    Complete employee information
+                </p>
             </div>
             <div class="col-sm-6">
-                <div class="float-sm-end">
-                    <div class="btn-group action-buttons" role="group">
-                        <a href="edit-employee.php?id=<?php echo $employee_id; ?>" class="btn btn-outline-success" title="Edit Employee">
-                            <i class="fas fa-edit me-1"></i> Edit
-                        </a>
-                        <a href="print-employee.php?id=<?php echo $employee_id; ?>" class="btn btn-outline-primary" title="Print Profile" target="_blank">
-                            <i class="fas fa-print me-1"></i> Print
-                        </a>
-                        <a href="employees.php" class="btn btn-outline-secondary" title="Back to List">
-                            <i class="fas fa-arrow-left me-1"></i> Back
-                        </a>
-                    </div>
+                <div class="float-sm-end action-buttons">
+                    <a href="index.php" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back to List
+                    </a>
+                    <a href="edit-employee.php?id=<?php echo $employee_id; ?>" class="btn btn-primary">
+                        <i class="fas fa-edit me-1"></i> Edit Employee
+                    </a>
+                    <button onclick="window.print()" class="btn btn-info">
+                        <i class="fas fa-print me-1"></i> Print
+                    </button>
                 </div>
             </div>
         </div>
@@ -298,6 +296,7 @@ require_once '../../includes/header.php';
 <section class="content">
     <div class="container-fluid">
 
+        <!-- Success/Error Messages -->
         <?php if (isset($_SESSION['success_message'])): ?>
         <div class="alert alert-success alert-dismissible fade show">
             <i class="fas fa-check-circle me-2"></i>
@@ -308,7 +307,7 @@ require_once '../../includes/header.php';
 
         <?php if (isset($_SESSION['error_message'])): ?>
         <div class="alert alert-danger alert-dismissible fade show">
-            <i class="fas fa-exclamation-circle me-2"></i>
+            <i class="fas fa-exclamation-triangle me-2"></i>
             <?php echo htmlspecialchars($_SESSION['error_message']); unset($_SESSION['error_message']); ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
@@ -317,393 +316,407 @@ require_once '../../includes/header.php';
         <!-- Employee Header -->
         <div class="employee-header">
             <div class="row align-items-center">
-                <div class="col-md-3 text-center">
-                    <div class="position-relative">
-                        <?php if (!empty($employee['profile_picture'])): ?>
-                        <img src="<?php echo htmlspecialchars($employee['profile_picture']); ?>" 
-                             alt="Profile Picture" class="employee-avatar" 
-                             onerror="this.src='../../assets/images/default-avatar.png'">
-                        <?php else: ?>
-                        <div class="employee-avatar bg-light d-flex align-items-center justify-content-center">
-                            <i class="fas fa-user fa-3x text-muted"></i>
-                        </div>
-                        <?php endif; ?>
+                <div class="col-auto">
+                    <?php if (!empty($employee['profile_picture'])): ?>
+                    <img src="../../<?php echo htmlspecialchars($employee['profile_picture']); ?>" 
+                         alt="Photo" class="employee-photo-large">
+                    <?php else: ?>
+                    <div class="employee-photo-large bg-white text-primary d-flex align-items-center justify-content-center" 
+                         style="font-size: 2.5rem; font-weight: 700;">
+                        <?php echo strtoupper(substr($employee['full_name'], 0, 2)); ?>
                     </div>
+                    <?php endif; ?>
                 </div>
-                <div class="col-md-9">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h1 class="employee-name">
-                                <?php echo htmlspecialchars(($employee['first_name'] ?? '') . ' ' . ($employee['middle_name'] ? $employee['middle_name'] . ' ' : '') . ($employee['last_name'] ?? '')); ?>
-                            </h1>
-                            <p class="employee-title">
-                                <i class="fas fa-briefcase me-2"></i>
-                                <?php echo htmlspecialchars($employee['position_title'] ?? 'Position Not Assigned'); ?>
-                            </p>
-                            <p class="mb-0">
-                                <span class="employee-id">
-                                    <i class="fas fa-id-badge me-2"></i>
-                                    <?php echo htmlspecialchars($employee['employee_number'] ?? 'N/A'); ?>
-                                </span>
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-md-end">
-                            <span class="status-badge status-<?php echo $employee['employment_status']; ?>">
-                                <i class="fas fa-circle me-1"></i>
-                                <?php echo ucwords(str_replace('_', ' ', $employee['employment_status'] ?? 'unknown')); ?>
-                            </span>
-                            <br>
-                            <small class="opacity-75 mt-2 d-block">
-                                <i class="fas fa-calendar-alt me-1"></i>
-                                Employed since <?php echo date('M d, Y', strtotime($employee['hire_date'])); ?>
-                                <br>
-                                <i class="fas fa-clock me-1"></i>
-                                <?php echo $tenure_text; ?>
-                            </small>
-                        </div>
+                <div class="col">
+                    <h2 class="mb-2"><?php echo htmlspecialchars($employee['full_name']); ?></h2>
+                    <div class="mb-2">
+                        <span class="status-badge <?php echo strtolower($employee['employment_status']); ?>">
+                            <?php echo ucfirst($employee['employment_status']); ?>
+                        </span>
+                        <span class="employment-type-badge ms-2">
+                            <?php echo ucfirst($employee['employment_type']); ?>
+                        </span>
+                    </div>
+                    <div>
+                        <strong>Employee #:</strong> <?php echo htmlspecialchars($employee['employee_number']); ?>
+                        <span class="ms-3"><strong>Email:</strong> <?php echo htmlspecialchars($employee['email']); ?></span>
+                        <?php if ($employee['phone1']): ?>
+                        <span class="ms-3"><strong>Phone:</strong> <?php echo htmlspecialchars($employee['phone1']); ?></span>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row g-4">
-
-            <!-- Personal Information -->
-            <div class="col-lg-6">
+        <div class="row">
+            <!-- Left Column -->
+            <div class="col-lg-8">
+                
+                <!-- Personal Information -->
                 <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-user-circle me-2 text-primary"></i>
-                        Personal Information
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-envelope me-2"></i>Email</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['email'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-phone me-2"></i>Phone 1</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['phone1'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-phone-alt me-2"></i>Phone 2</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['phone2'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-venus-mars me-2"></i>Gender</div>
-                            <div class="info-value"><?php echo ucfirst(htmlspecialchars($employee['gender'] ?? 'N/A')); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-birthday-cake me-2"></i>Date of Birth</div>
-                            <div class="info-value">
-                                <?php if ($employee['date_of_birth']): ?>
-                                    <?php echo date('M d, Y', strtotime($employee['date_of_birth'])); ?>
-                                    (<?php echo $today->diff(new DateTime($employee['date_of_birth']))->y; ?> years old)
-                                <?php else: ?>
-                                    N/A
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-id-card me-2"></i>National ID</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['national_id'] ?? 'N/A'); ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Employment Information -->
-            <div class="col-lg-6">
-                <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-briefcase me-2 text-success"></i>
-                        Employment Information
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-building me-2"></i>Department</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['department_name'] ?? 'Not Assigned'); ?></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-user-tag me-2"></i>Position</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['position_title'] ?? 'Not Assigned'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-calendar-check me-2"></i>Hire Date</div>
-                            <div class="info-value"><?php echo date('M d, Y', strtotime($employee['hire_date'])); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-calendar-alt me-2"></i>Confirmation Date</div>
-                            <div class="info-value">
-                                <?php echo $employee['confirmation_date'] ? date('M d, Y', strtotime($employee['confirmation_date'])) : 'N/A'; ?>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-file-contract me-2"></i>Employment Type</div>
-                            <div class="info-value">
-                                <span class="badge bg-<?php 
-                                    echo $employee['employment_type'] === 'permanent' ? 'success' : 
-                                         ($employee['employment_type'] === 'contract' ? 'warning' : 'info');
-                                ?>">
-                                    <?php echo ucwords(str_replace('_', ' ', $employee['employment_type'] ?? 'N/A')); ?>
-                                </span>
-                            </div>
-                        </div>
-                        <?php if ($employee['contract_end_date']): ?>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-stopwatch me-2"></i>Contract Ends</div>
-                            <div class="info-value"><?php echo date('M d, Y', strtotime($employee['contract_end_date'])); ?></div>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Salary Information -->
-            <div class="col-12">
-                <div class="salary-card">
-                    <h3 class="mb-4">
-                        <i class="fas fa-money-bill-wave me-2"></i>
-                        Salary Information
-                    </h3>
-                    <div class="salary-amount">
-                        TSH <?php echo number_format(($employee['basic_salary'] ?? 0) + ($employee['allowances'] ?? 0), 0); ?>
-                    </div>
-                    <small class="opacity-75">Monthly Total Salary</small>
+                    <h5><i class="fas fa-user"></i> Personal Information</h5>
                     
-                    <div class="salary-breakdown">
-                        <div class="salary-item">
-                            <div class="h6 mb-1">Basic Salary</div>
-                            <div class="fw-bold">TSH <?php echo number_format($employee['basic_salary'] ?? 0, 0); ?></div>
+                    <div class="info-row">
+                        <div class="info-label">Full Name:</div>
+                        <div class="info-value"><?php echo htmlspecialchars($employee['full_name']); ?></div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">First Name:</div>
+                        <div class="info-value"><?php echo htmlspecialchars($employee['first_name'] ?? '—'); ?></div>
+                    </div>
+                    
+                    <?php if ($employee['middle_name']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Middle Name:</div>
+                        <div class="info-value"><?php echo htmlspecialchars($employee['middle_name']); ?></div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Last Name:</div>
+                        <div class="info-value"><?php echo htmlspecialchars($employee['last_name'] ?? '—'); ?></div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Gender:</div>
+                        <div class="info-value">
+                            <?php echo $employee['gender'] ? ucfirst($employee['gender']) : '<span class="empty-value">Not specified</span>'; ?>
                         </div>
-                        <div class="salary-item">
-                            <div class="h6 mb-1">Allowances</div>
-                            <div class="fw-bold">TSH <?php echo number_format($employee['allowances'] ?? 0, 0); ?></div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Date of Birth:</div>
+                        <div class="info-value">
+                            <?php if ($employee['date_of_birth']): ?>
+                                <?php echo date('F d, Y', strtotime($employee['date_of_birth'])); ?>
+                                <?php if ($age): ?>
+                                    <span class="text-muted">(<?php echo $age; ?> years old)</span>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="empty-value">Not specified</span>
+                            <?php endif; ?>
                         </div>
-                        <div class="salary-item">
-                            <div class="h6 mb-1">Total</div>
-                            <div class="fw-bold text-warning">TSH <?php echo number_format(($employee['basic_salary'] ?? 0) + ($employee['allowances'] ?? 0), 0); ?></div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">National ID:</div>
+                        <div class="info-value">
+                            <?php echo $employee['national_id'] ? htmlspecialchars($employee['national_id']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Email Address:</div>
+                        <div class="info-value">
+                            <a href="mailto:<?php echo htmlspecialchars($employee['email']); ?>">
+                                <?php echo htmlspecialchars($employee['email']); ?>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Primary Phone:</div>
+                        <div class="info-value">
+                            <?php echo $employee['phone1'] ? htmlspecialchars($employee['phone1']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <?php if ($employee['phone2']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Secondary Phone:</div>
+                        <div class="info-value"><?php echo htmlspecialchars($employee['phone2']); ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Address Information -->
+                <div class="info-card" style="border-left-color: #28a745;">
+                    <h5 style="color: #28a745;"><i class="fas fa-map-marker-alt"></i> Address Information</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Region:</div>
+                        <div class="info-value">
+                            <?php echo $employee['region'] ? htmlspecialchars($employee['region']) : '<span class="empty-value">Not specified</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">District:</div>
+                        <div class="info-value">
+                            <?php echo $employee['district'] ? htmlspecialchars($employee['district']) : '<span class="empty-value">Not specified</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Ward:</div>
+                        <div class="info-value">
+                            <?php echo $employee['ward'] ? htmlspecialchars($employee['ward']) : '<span class="empty-value">Not specified</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Street/Village:</div>
+                        <div class="info-value">
+                            <?php echo $employee['village'] ? htmlspecialchars($employee['village']) : '<span class="empty-value">Not specified</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <?php if ($employee['street_address']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Full Address:</div>
+                        <div class="info-value"><?php echo nl2br(htmlspecialchars($employee['street_address'])); ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Employment Details -->
+                <div class="info-card" style="border-left-color: #17a2b8;">
+                    <h5 style="color: #17a2b8;"><i class="fas fa-briefcase"></i> Employment Details</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Employee Number:</div>
+                        <div class="info-value">
+                            <strong><?php echo htmlspecialchars($employee['employee_number']); ?></strong>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Department:</div>
+                        <div class="info-value">
+                            <?php echo $employee['department_name'] ? htmlspecialchars($employee['department_name']) : '<span class="empty-value">Not assigned</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Position:</div>
+                        <div class="info-value">
+                            <?php echo $employee['position_title'] ? htmlspecialchars($employee['position_title']) : '<span class="empty-value">Not assigned</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Employment Type:</div>
+                        <div class="info-value">
+                            <span class="employment-type-badge">
+                                <?php echo ucfirst($employee['employment_type']); ?>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Employment Status:</div>
+                        <div class="info-value">
+                            <span class="status-badge <?php echo strtolower($employee['employment_status']); ?>">
+                                <?php echo ucfirst($employee['employment_status']); ?>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Hire Date:</div>
+                        <div class="info-value">
+                            <?php echo date('F d, Y', strtotime($employee['hire_date'])); ?>
+                            <span class="text-muted">
+                                (<?php echo $employee['years_of_service']; ?> years, 
+                                <?php echo $employee['months_of_service'] % 12; ?> months)
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <?php if ($employee['confirmation_date']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Confirmation Date:</div>
+                        <div class="info-value"><?php echo date('F d, Y', strtotime($employee['confirmation_date'])); ?></div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($employee['employment_type'] === 'contract' && $employee['contract_end_date']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Contract End Date:</div>
+                        <div class="info-value">
+                            <?php echo date('F d, Y', strtotime($employee['contract_end_date'])); ?>
+                            <?php
+                            $end_date = new DateTime($employee['contract_end_date']);
+                            $now = new DateTime();
+                            if ($end_date < $now) {
+                                echo '<span class="badge bg-danger ms-2">Expired</span>';
+                            } else {
+                                $days_remaining = $now->diff($end_date)->days;
+                                echo '<span class="badge bg-warning text-dark ms-2">' . $days_remaining . ' days remaining</span>';
+                            }
+                            ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Tax & Social Security Information -->
+                <div class="info-card" style="border-left-color: #6f42c1;">
+                    <h5 style="color: #6f42c1;"><i class="fas fa-id-card"></i> Tax & Social Security</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">NSSF Number:</div>
+                        <div class="info-value">
+                            <?php echo $employee['nssf_number'] ? htmlspecialchars($employee['nssf_number']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">TIN Number:</div>
+                        <div class="info-value">
+                            <?php echo $employee['tin_number'] ? htmlspecialchars($employee['tin_number']) : '<span class="empty-value">Not provided</span>'; ?>
                         </div>
                     </div>
                 </div>
+
+                <!-- Bank Information -->
+                <div class="info-card" style="border-left-color: #20c997;">
+                    <h5 style="color: #20c997;"><i class="fas fa-university"></i> Bank Information</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Bank Name:</div>
+                        <div class="info-value">
+                            <?php echo $employee['bank_name'] ? htmlspecialchars($employee['bank_name']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Account Number:</div>
+                        <div class="info-value">
+                            <?php echo $employee['account_number'] ? htmlspecialchars($employee['account_number']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Bank Branch:</div>
+                        <div class="info-value">
+                            <?php echo $employee['bank_branch'] ? htmlspecialchars($employee['bank_branch']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emergency Contact -->
+                <div class="info-card" style="border-left-color: #dc3545;">
+                    <h5 style="color: #dc3545;"><i class="fas fa-phone-alt"></i> Emergency Contact</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Contact Name:</div>
+                        <div class="info-value">
+                            <?php echo $employee['emergency_contact_name'] ? htmlspecialchars($employee['emergency_contact_name']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Contact Phone:</div>
+                        <div class="info-value">
+                            <?php echo $employee['emergency_contact_phone'] ? htmlspecialchars($employee['emergency_contact_phone']) : '<span class="empty-value">Not provided</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Relationship:</div>
+                        <div class="info-value">
+                            <?php echo $employee['emergency_contact_relationship'] ? ucfirst($employee['emergency_contact_relationship']) : '<span class="empty-value">Not specified</span>'; ?>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
-            <!-- Address Information -->
-            <div class="col-lg-6">
+            <!-- Right Column -->
+            <div class="col-lg-4">
+                
+                <!-- Salary Information -->
+                <div class="salary-box">
+                    <div class="salary-label">Total Monthly Salary</div>
+                    <div class="salary-amount">TSH <?php echo number_format($total_salary, 0); ?></div>
+                    <hr style="border-color: rgba(255,255,255,0.3);">
+                    <div class="row text-start">
+                        <div class="col-6">
+                            <small>Basic Salary:</small>
+                            <div><strong>TSH <?php echo number_format($employee['basic_salary'] ?? 0, 0); ?></strong></div>
+                        </div>
+                        <div class="col-6">
+                            <small>Allowances:</small>
+                            <div><strong>TSH <?php echo number_format($employee['allowances'] ?? 0, 0); ?></strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Service Duration -->
+                <div class="service-box mb-3">
+                    <div class="salary-label">Years of Service</div>
+                    <div class="service-years">
+                        <?php 
+                        $years = $employee['years_of_service'];
+                        $months = $employee['months_of_service'] % 12;
+                        echo $years . 'y ' . $months . 'm';
+                        ?>
+                    </div>
+                    <div>Since <?php echo date('F Y', strtotime($employee['hire_date'])); ?></div>
+                </div>
+
+                <!-- Quick Stats -->
                 <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-map-marker-alt me-2 text-info"></i>
-                        Address Information
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-home me-2"></i>Full Address</div>
-                            <div class="info-value">
-                                <?php 
-                                $address_parts = array_filter([
-                                    $employee['region'],
-                                    $employee['district'],
-                                    $employee['ward'],
-                                    $employee['village'],
-                                    $employee['street_address']
-                                ]);
-                                echo !empty($address_parts) ? implode(', ', $address_parts) : 'N/A';
-                                ?>
-                            </div>
+                    <h5><i class="fas fa-chart-line"></i> Quick Stats</h5>
+                    
+                    <div class="stat-box mb-2">
+                        <div class="stat-number"><?php echo $employee['days_of_service']; ?></div>
+                        <div class="stat-label">Total Days of Service</div>
+                    </div>
+                    
+                    <div class="stat-box mb-2">
+                        <div class="stat-number"><?php echo date('l', strtotime($employee['hire_date'])); ?></div>
+                        <div class="stat-label">Hired on</div>
+                    </div>
+                    
+                    <?php if ($employee['confirmation_date']): ?>
+                    <div class="stat-box">
+                        <div class="stat-number">
+                            <?php 
+                            $confirmed = new DateTime($employee['confirmation_date']);
+                            $hired = new DateTime($employee['hire_date']);
+                            echo $hired->diff($confirmed)->days;
+                            ?>
+                        </div>
+                        <div class="stat-label">Days to Confirmation</div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- System Information -->
+                <div class="info-card" style="border-left-color: #6c757d;">
+                    <h5 style="color: #6c757d;"><i class="fas fa-info-circle"></i> System Information</h5>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Created By:</div>
+                        <div class="info-value">
+                            <?php echo $employee['created_by_name'] ? htmlspecialchars($employee['created_by_name']) : 'System'; ?>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Bank Information -->
-            <div class="col-lg-6">
-                <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-university me-2 text-warning"></i>
-                        Bank Information
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-building-columns me-2"></i>Bank Name</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['bank_name'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-credit-card me-2"></i>Account Number</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['account_number'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-map-pin me-2"></i>Branch</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['bank_branch'] ?? 'N/A'); ?></div>
+                    
+                    <div class="info-row">
+                        <div class="info-label">Created On:</div>
+                        <div class="info-value">
+                            <?php echo date('F d, Y g:i A', strtotime($employee['created_at'])); ?>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Emergency Contact -->
-            <div class="col-lg-6">
-                <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-phone-square me-2 text-danger"></i>
-                        Emergency Contact
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-user me-2"></i>Contact Name</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['emergency_contact_name'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label"><i class="fas fa-mobile-alt me-2"></i>Phone</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['emergency_contact_phone'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="info-label"><i class="fas fa-link me-2"></i>Relationship</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['emergency_contact_relationship'] ?? 'N/A'); ?></div>
+                    
+                    <?php if ($employee['updated_at']): ?>
+                    <div class="info-row">
+                        <div class="info-label">Last Updated:</div>
+                        <div class="info-value">
+                            <?php echo date('F d, Y g:i A', strtotime($employee['updated_at'])); ?>
                         </div>
                     </div>
+                    <?php endif; ?>
                 </div>
-            </div>
 
-            <!-- Recent Payroll -->
-            <?php if (!empty($recent_payrolls)): ?>
-            <div class="col-12">
-                <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
-                        Recent Payroll (Last 3 Months)
-                    </h5>
-                    <div class="table-responsive">
-                        <table class="table table-hover payroll-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Month</th>
-                                    <th>Basic Salary</th>
-                                    <th>Allowances</th>
-                                    <th>Total</th>
-                                    <th>Payment Date</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($recent_payrolls as $payroll): ?>
-                                <tr>
-                                    <td>
-                                        <strong><?php echo date('M Y', strtotime($payroll['payroll_month'])); ?></strong>
-                                    </td>
-                                    <td><strong>TSH <?php echo number_format($payroll['basic_salary'], 0); ?></strong></td>
-                                    <td>TSH <?php echo number_format($payroll['allowances'], 0); ?></td>
-                                    <td class="fw-bold text-success">
-                                        TSH <?php echo number_format($payroll['total_salary'], 0); ?>
-                                    </td>
-                                    <td>
-                                        <?php echo $payroll['payment_date'] ? date('M d, Y', strtotime($payroll['payment_date'])) : 'Pending'; ?>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-<?php 
-                                            echo $payroll['status'] === 'paid' ? 'success' : 
-                                                 ($payroll['status'] === 'pending' ? 'warning' : 'secondary');
-                                        ?>">
-                                            <?php echo ucfirst($payroll['status']); ?>
-                                        </span>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <!-- System Information -->
-            <div class="col-12">
-                <div class="info-card">
-                    <h5 class="card-title mb-4">
-                        <i class="fas fa-cogs me-2 text-secondary"></i>
-                        System Information
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <div class="info-label">Username</div>
-                            <div class="info-value"><?php echo htmlspecialchars($employee['username'] ?? 'N/A'); ?></div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-label">Account Created</div>
-                            <div class="info-value"><?php echo date('M d, Y H:i', strtotime($employee['user_created_at'] ?? $employee['created_at'])); ?></div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-label">Last Updated</div>
-                            <div class="info-value"><?php echo date('M d, Y H:i', strtotime($employee['updated_at'] ?? $employee['created_at'])); ?></div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="info-label">Record ID</div>
-                            <div class="info-value">#<?php echo $employee['employee_id']; ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="row mt-5">
-            <div class="col-12 text-center">
-                <div class="btn-group action-buttons" role="group">
-                    <a href="edit-employee.php?id=<?php echo $employee_id; ?>" class="btn btn-primary btn-lg px-4 me-2">
-                        <i class="fas fa-edit me-2"></i> Edit Employee
-                    </a>
-                    <a href="print-employee.php?id=<?php echo $employee_id; ?>" class="btn btn-outline-primary btn-lg px-4 me-2" target="_blank">
-                        <i class="fas fa-print me-2"></i> Print Profile
-                    </a>
-                    <a href="generate-payslip.php?id=<?php echo $employee_id; ?>" class="btn btn-outline-success btn-lg px-4 me-2">
-                        <i class="fas fa-file-invoice me-2"></i> Generate Payslip
-                    </a>
-                    <a href="employees.php" class="btn btn-outline-secondary btn-lg px-4">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Employees
-                    </a>
-                </div>
             </div>
         </div>
 
     </div>
 </section>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Add print functionality
-    const printBtn = document.querySelectorAll('[href*="print-employee"]');
-    printBtn.forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            // Optional: Add loading state
-            this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Preparing Print...';
-        });
-    });
-
-    // Smooth scroll to sections
-    const infoCards = document.querySelectorAll('.info-card');
-    infoCards.forEach(card => {
-        card.addEventListener('click', function() {
-            // Add subtle animation
-            this.style.transform = 'scale(1.02)';
-            setTimeout(() => {
-                this.style.transform = 'scale(1)';
-            }, 150);
-        });
-    });
-
-    // Copy employee number to clipboard
-    const employeeId = document.querySelector('.employee-id');
-    if (employeeId) {
-        employeeId.addEventListener('click', function() {
-            navigator.clipboard.writeText('<?php echo addslashes($employee['employee_number'] ?? ''); ?>');
-            const originalText = this.innerHTML;
-            this.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
-            this.style.background = 'rgba(40, 167, 69, 0.2)';
-            setTimeout(() => {
-                this.innerHTML = originalText;
-                this.style.background = 'rgba(255,255,255,0.2)';
-            }, 2000);
-        });
-    }
-});
-</script>
 
 <?php require_once '../../includes/footer.php'; ?>

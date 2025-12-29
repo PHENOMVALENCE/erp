@@ -8,58 +8,9 @@ $base_path = $depth > 0 ? str_repeat('../', $depth) : '';
 
 // Get current page for active menu
 $current_page = basename($_SERVER['PHP_SELF']);
-$current_dir = dirname($_SERVER['PHP_SELF']);
-$current_module = basename($current_dir);
-
-// Handle special case: "leave management" folder should be treated as "leave"
-if ($current_module == 'leave management') {
-    $current_module = 'leave';
-}
-
-// Build current path for comparison (normalize slashes)
-$current_full_path = str_replace('\\', '/', trim($current_dir . '/' . $current_page, '/'));
-$current_full_path = preg_replace('#^/#', '', $current_full_path); // Remove leading slash
-
-// Function to check if a link is active
-function isActiveLink($link_href, $current_full_path, $current_page, $current_module) {
-    // Normalize the link path
-    $link_path = str_replace('\\', '/', $link_href);
-    
-    // Remove base_path (../) if present
-    $link_path = preg_replace('#^(\.\./)+#', '', $link_path);
-    
-    // Extract module and page from link
-    $link_module = '';
-    $link_page = basename($link_path);
-    
-    if (preg_match('#modules/([^/]+)/#', $link_path, $matches)) {
-        $link_module = $matches[1];
-        if ($link_module == 'leave management') $link_module = 'leave';
-    }
-    
-    // Check if it's the root index.php
-    if ($link_path == 'index.php' && $current_full_path == 'index.php' && $current_module != 'modules') {
-        return true;
-    }
-    
-    // Check by module and page name (most reliable method)
-    if ($link_module == $current_module && $link_page == $current_page) {
-        return true;
-    }
-    
-    // Also check full path match (normalize both)
-    $normalized_link = preg_replace('#^/#', '', $link_path);
-    $normalized_current = preg_replace('#^/#', '', $current_full_path);
-    if ($normalized_link == $normalized_current) {
-        return true;
-    }
-    
-    return false;
-}
+$current_module = basename(dirname($_SERVER['PHP_SELF']));
 ?>
-
-
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -80,154 +31,154 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            font-size: 14px; 
-            line-height: 1.6; 
-            color: #1f2937; 
-            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            font-size: 13px; 
+            line-height: 1.5; 
+            color: #374151; 
+            background: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .wrapper {
+            display: flex;
+            flex-direction: column;
             min-height: 100vh;
         }
         
-        /* Enhanced Header */
+        /* Professional Header */
         .main-header { 
             position: fixed; 
             top: 0; 
             left: 0; 
             right: 0; 
             z-index: 1030; 
-            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-            border-bottom: none;
-            height: 64px; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background: #1e3a8a;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            height: 65px; 
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
-        .navbar { padding: 0; height: 64px; }
+        .navbar { 
+            padding: 0; 
+            height: 65px;
+        }
         
         .navbar-brand { 
-            padding: 0 20px; 
-            font-size: 22px; 
-            line-height: 64px; 
+            padding: 0 24px; 
+            font-size: 18px; 
+            line-height: 65px; 
             color: #fff; 
             font-weight: 600;
-            letter-spacing: -0.5px;
-            transition: opacity 0.3s;
+            letter-spacing: 0.2px;
             display: flex;
             align-items: center;
             gap: 12px;
+            text-decoration: none;
         }
         
-        .navbar-brand:hover { opacity: 0.9; color: #fff; }
-        .navbar-brand b { font-weight: 700; }
+        .navbar-brand:hover { 
+            color: #fff;
+            text-decoration: none;
+        }
         
         .brand-logo {
-            width: 100px;
-            height: 60px;
-            border-radius: 8px;
+            width: 45px;
+            height: 45px;
+            border-radius: 4px;
             object-fit: cover;
             background: #fff;
-            padding: 2px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 3px;
+        }
+        
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+        
+        .brand-text-main {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: 0.3px;
+        }
+        
+        .brand-text-sub {
+            font-size: 10px;
+            font-weight: 400;
+            color: rgba(255,255,255,0.75);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
         }
         
         .nav-link { 
             padding: 0 16px; 
             color: rgba(255,255,255,0.9); 
-            height: 64px; 
+            height: 65px; 
             display: flex; 
             align-items: center;
-            transition: all 0.3s;
             position: relative;
+            text-decoration: none;
+            font-size: 13px;
         }
         
         .nav-link:hover { 
-            background: rgba(255,255,255,0.1); 
+            background: rgba(255,255,255,0.08); 
             color: #fff;
         }
         
-        .nav-link i { font-size: 18px; }
+        .nav-link i { 
+            font-size: 17px;
+        }
         
-        /* Enhanced Sidebar */
+        /* Professional Sidebar */
         .main-sidebar { 
             position: fixed; 
-            top: 64px; 
-            bottom: 0; 
+            top: 65px; 
+            bottom: 50px;
             left: 0; 
-            width: 260px; 
+            width: 250px; 
             background: #1f2937;
             overflow-y: auto; 
-            z-index: 1020; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            z-index: 1020;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.08);
         }
         
-        /* Sidebar Logo Section */
-        .sidebar-logo {
-            padding: 20px;
-            text-align: center;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .sidebar-logo img {
-            width: 80px;
-            height: 80px;
-            border-radius: 12px;
-            object-fit: cover;
-            background: #fff;
-            padding: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            margin-bottom: 12px;
-        }
-        
-        .sidebar-logo-text {
-            color: #fff;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        }
-        
-        .sidebar-logo-subtitle {
-            color: #9ca3af;
-            font-size: 11px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 4px;
-        }
-        
-        .sidebar { padding: 16px 0; }
+        .sidebar { padding: 12px 0; }
         
         .nav-sidebar .nav-link { 
             color: #9ca3af; 
-            padding: 12px 20px; 
+            padding: 10px 18px; 
             display: flex; 
             align-items: center; 
             border-left: 3px solid transparent;
-            transition: all 0.2s;
             font-weight: 500;
-            font-size: 14px;
+            font-size: 13px;
         }
         
         .nav-sidebar .nav-link:hover { 
-            background: rgba(59, 130, 246, 0.1); 
+            background: rgba(59, 130, 246, 0.08); 
             color: #3b82f6;
             border-left-color: #3b82f6;
-            padding-left: 24px;
+            padding-left: 22px;
         }
         
         .nav-sidebar .nav-link.active { 
             color: #fff; 
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.05) 100%);
+            background: rgba(59, 130, 246, 0.15);
             border-left-color: #3b82f6;
             font-weight: 600;
         }
         
         .nav-icon { 
-            width: 24px; 
+            width: 22px; 
             text-align: center; 
-            margin-right: 12px; 
-            font-size: 16px;
+            margin-right: 10px; 
+            font-size: 15px;
         }
         
         .nav-treeview { 
@@ -239,77 +190,111 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
         }
         
         .nav-treeview .nav-link { 
-            padding-left: 56px; 
-            font-size: 13px;
+            padding-left: 50px; 
+            font-size: 12px;
             font-weight: 400;
         }
         
         .nav-treeview .nav-link:hover {
-            padding-left: 60px;
+            padding-left: 54px;
         }
         
         .nav-item.menu-open > .nav-treeview { 
             display: block;
-            animation: slideDown 0.3s ease-out;
         }
         
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .nav-link.has-dropdown { 
-            cursor: pointer;
-            user-select: none;
-        }
-        
-        .nav-link.has-dropdown::after { 
+        .nav-link[data-toggle="dropdown"]::after { 
             margin-left: auto; 
             content: "\f105"; 
             font-family: "Font Awesome 6 Free"; 
             font-weight: 900; 
-            transition: transform 0.3s;
-            font-size: 12px;
-            pointer-events: none;
+            font-size: 11px;
         }
         
-        .nav-item.menu-open > .nav-link.has-dropdown::after { 
+        .nav-item.menu-open > .nav-link[data-toggle="dropdown"]::after { 
             transform: rotate(90deg); 
         }
         
         /* Content Wrapper */
         .content-wrapper { 
-            margin-left: 260px; 
-            margin-top: 64px; 
-            min-height: calc(100vh - 64px); 
-            padding: 24px; 
-            background: transparent;
-            transition: margin-left 0.3s;
+            flex: 1;
+            margin-left: 250px; 
+            margin-top: 65px; 
+            margin-bottom: 50px;
+            min-height: calc(100vh - 115px); 
+            padding: 20px; 
+            background: #f3f4f6;
+        }
+        
+        /* Professional Footer */
+        .main-footer {
+            position: fixed;
+            bottom: 0;
+            left: 250px;
+            right: 0;
+            height: 50px;
+            background: #1e3a8a;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            font-size: 12px;
+            z-index: 1010;
+            box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .footer-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .footer-link {
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            font-size: 12px;
+        }
+        
+        .footer-link:hover {
+            color: #fff;
+        }
+        
+        .footer-divider {
+            height: 20px;
+            width: 1px;
+            background: rgba(255,255,255,0.2);
         }
         
         /* Enhanced Badges */
         .badge { 
-            font-size: 10px; 
-            padding: 4px 8px; 
+            font-size: 9px; 
+            padding: 3px 7px; 
             margin-left: auto;
-            border-radius: 12px;
+            border-radius: 10px;
             font-weight: 600;
         }
         
         /* Enhanced Dropdown */
         .dropdown-menu { 
             border: none;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            padding: 8px;
-            margin-top: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 6px;
+            padding: 6px;
+            margin-top: 6px;
         }
         
         .dropdown-item { 
-            padding: 10px 16px;
-            border-radius: 6px;
-            transition: all 0.2s;
-            font-size: 14px;
+            padding: 9px 14px;
+            border-radius: 4px;
+            font-size: 13px;
         }
         
         .dropdown-item:hover { 
@@ -318,29 +303,95 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
         }
         
         .dropdown-item i { 
-            width: 20px;
+            width: 18px;
             text-align: center;
         }
         
         .dropdown-divider { 
-            margin: 8px 0;
+            margin: 6px 0;
             opacity: 0.1;
         }
         
         /* Menu Section Headers */
         .nav-header {
-            padding: 16px 20px 8px;
+            padding: 14px 18px 6px;
             color: #6b7280;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         
+        /* User Avatar */
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 9px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+        
+        .user-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #fff;
+        }
+        
+        .user-role {
+            font-size: 10px;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        /* Dropdown Header Styling */
+        .dropdown-header {
+            padding: 10px 14px;
+            background: #f9fafb;
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
+        
+        .dropdown-header strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 2px;
+        }
+        
+        /* Notification Badge */
+        .notification-badge {
+            position: absolute;
+            top: 16px;
+            right: 8px;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 4px;
+            border-radius: 8px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 9px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        
         /* Responsive */
         @media (max-width: 991.98px) {
             .main-sidebar { 
-                margin-left: -260px; 
+                margin-left: -250px; 
             }
             .main-sidebar.sidebar-open { 
                 margin-left: 0;
@@ -349,18 +400,28 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
             .content-wrapper { 
                 margin-left: 0; 
             }
-            .brand-logo {
-                width: 36px;
-                height: 36px;
+            .main-footer {
+                left: 0;
             }
-            .navbar-brand {
-                font-size: 18px;
+            .brand-logo {
+                width: 38px;
+                height: 38px;
+            }
+            .brand-text-sub {
+                display: none;
+            }
+            .user-info {
+                display: none;
+            }
+            .footer-left span:not(:first-child),
+            .footer-divider {
+                display: none;
             }
         }
         
         /* Scrollbar Styling */
         .main-sidebar::-webkit-scrollbar { 
-            width: 6px; 
+            width: 5px; 
         }
         
         .main-sidebar::-webkit-scrollbar-track {
@@ -375,151 +436,117 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
         .main-sidebar::-webkit-scrollbar-thumb:hover {
             background: #4b5563;
         }
-        
-        /* Notification Badge Animation */
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .nav-link .badge {
-            animation: pulse 2s infinite;
-        }
-        
-        /* User Avatar */
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.2);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 8px;
-            font-weight: 600;
-        }
     </style>
 </head>
 <body class="hold-transition sidebar-mini">
 <div class="wrapper">
 
-    <!-- Enhanced Navbar -->
+    <!-- Professional Navbar -->
     <nav class="main-header navbar navbar-expand">
         <ul class="navbar-nav">
             <li class="nav-item d-lg-none">
-                <a class="nav-link" href="#" onclick="toggleSidebar(); return false;">
+                <a class="nav-link" href="#" onclick="document.getElementById('mainSidebar').classList.toggle('sidebar-open')">
                     <i class="fas fa-bars"></i>
                 </a>
             </li>
             <li class="nav-item">
                 <a href="<?php echo $base_path; ?>index.php" class="navbar-brand">
                     <img src="<?php echo $base_path; ?>assets/img/logo.jpg" alt="Logo" class="brand-logo">
-                    <span>ERP</span>
+                    <div class="brand-text">
+                        <span class="brand-text-main">Mkumbi Investment ERP</span>
+                        <span class="brand-text-sub">Real Estate Management</span>
+                    </div>
                 </a>
             </li>
         </ul>
         <ul class="navbar-nav ms-auto">
             <!-- Quick Actions Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Quick Actions">
+                <a class="nav-link" data-bs-toggle="dropdown" href="#" title="Quick Actions">
                     <i class="fas fa-bolt"></i>
                 </a>
                 <div class="dropdown-menu dropdown-menu-end" style="min-width: 220px;">
-                    <h6 class="dropdown-header">Quick Actions</h6>
+                    <h6 class="dropdown-header">
+                        <strong>Quick Actions</strong>
+                    </h6>
                     <a href="<?php echo $base_path; ?>modules/sales/create.php" class="dropdown-item">
                         <i class="fas fa-plus-circle me-2 text-success"></i> New Reservation
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/leave/apply.php" class="dropdown-item">
-                        <i class="fas fa-calendar-plus me-2 text-info"></i> Apply Leave
+                    <a href="<?php echo $base_path; ?>modules/payments/record.php" class="dropdown-item">
+                        <i class="fas fa-money-bill-wave me-2 text-info"></i> Record Payment
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/loans/apply.php" class="dropdown-item">
-                        <i class="fas fa-hand-holding-usd me-2 text-warning"></i> Apply Loan
+                    <a href="<?php echo $base_path; ?>modules/marketing/create-lead.php" class="dropdown-item">
+                        <i class="fas fa-user-plus me-2 text-primary"></i> Add Lead
                     </a>
-                    <a href="<?php echo $base_path; ?>modules/petty_cash/request.php" class="dropdown-item">
-                        <i class="fas fa-wallet me-2 text-danger"></i> Petty Cash Request
+                    <a href="<?php echo $base_path; ?>modules/titledeed/initiate.php" class="dropdown-item">
+                        <i class="fas fa-certificate me-2 text-warning"></i> Title Processing
                     </a>
-                </div>
-            </li>
-            
-            <!-- Messages Dropdown -->
-            <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Messages">
-                    <i class="far fa-envelope"></i>
-                    <span class="badge bg-danger">3</span>
-                </a>
-                <div class="dropdown-menu dropdown-menu-end" style="min-width: 280px;">
-                    <h6 class="dropdown-header">New Messages</h6>
-                    <a href="#" class="dropdown-item">
-                        <div class="d-flex align-items-center">
-                            <div class="user-avatar bg-primary text-white">JD</div>
-                            <div class="flex-grow-1">
-                                <strong>John Doe</strong>
-                                <p class="mb-0 small text-muted">Payment inquiry...</p>
-                            </div>
-                        </div>
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a href="#" class="dropdown-item text-center small">View All Messages</a>
                 </div>
             </li>
             
             <!-- Notifications Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Notifications">
+                <a class="nav-link position-relative" data-bs-toggle="dropdown" href="#" title="Notifications">
                     <i class="far fa-bell"></i>
-                    <span class="badge bg-warning">8</span>
+                    <span class="notification-badge" style="background: #f59e0b;">8</span>
                 </a>
                 <div class="dropdown-menu dropdown-menu-end" style="min-width: 320px;">
-                    <h6 class="dropdown-header">Notifications</h6>
+                    <h6 class="dropdown-header">
+                        <strong>Notifications</strong>
+                        <p class="mb-0 small text-muted">You have 8 new notifications</p>
+                    </h6>
                     <a href="#" class="dropdown-item">
                         <i class="fas fa-check-circle me-2 text-success"></i> New payment received
                         <small class="float-end text-muted">5m ago</small>
                     </a>
                     <a href="#" class="dropdown-item">
-                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i> 3 expenses pending approval
+                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i> 3 payments overdue
                         <small class="float-end text-muted">1h ago</small>
                     </a>
                     <a href="#" class="dropdown-item">
-                        <i class="fas fa-hand-holding-usd me-2 text-info"></i> Loan application received
+                        <i class="fas fa-certificate me-2 text-info"></i> Title deed ready
                         <small class="float-end text-muted">2h ago</small>
                     </a>
                     <div class="dropdown-divider"></div>
-                    <a href="#" class="dropdown-item text-center small">View All Notifications</a>
+                    <a href="#" class="dropdown-item text-center small text-primary">View All Notifications</a>
                 </div>
             </li>
             
             <!-- Tasks Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Tasks">
+                <a class="nav-link position-relative" data-bs-toggle="dropdown" href="#" title="Tasks">
                     <i class="fas fa-tasks"></i>
-                    <span class="badge bg-info">6</span>
+                    <span class="notification-badge" style="background: #3b82f6;">6</span>
                 </a>
                 <div class="dropdown-menu dropdown-menu-end" style="min-width: 280px;">
-                    <h6 class="dropdown-header">Pending Tasks</h6>
-                    <a href="#" class="dropdown-item">
-                        <i class="fas fa-file-signature me-2 text-primary"></i> Review contract #1234
+                    <h6 class="dropdown-header">
+                        <strong>My Tasks</strong>
+                        <p class="mb-0 small text-muted">6 tasks pending</p>
+                    </h6>
+                    <a href="<?php echo $base_path; ?>modules/tasks/my-tasks.php" class="dropdown-item">
+                        <i class="fas fa-list me-2 text-primary"></i> View My Tasks
                     </a>
-                    <a href="#" class="dropdown-item">
-                        <i class="fas fa-check-double me-2 text-success"></i> Approve 2 expense claims
-                    </a>
-                    <a href="#" class="dropdown-item">
-                        <i class="fas fa-cash-register me-2 text-warning"></i> Petty cash reconciliation
+                    <a href="<?php echo $base_path; ?>modules/approvals/pending.php" class="dropdown-item">
+                        <i class="fas fa-check-double me-2 text-success"></i> Pending Approvals
                     </a>
                     <div class="dropdown-divider"></div>
-                    <a href="#" class="dropdown-item text-center small">View All Tasks</a>
+                    <a href="<?php echo $base_path; ?>modules/tasks/index.php" class="dropdown-item text-center small text-primary">All Tasks</a>
                 </div>
             </li>
             
             <!-- User Profile Dropdown -->
             <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false" title="Profile">
+                <a class="nav-link d-flex align-items-center" data-bs-toggle="dropdown" href="#" title="Profile">
                     <div class="user-avatar">
                         <?php echo strtoupper(substr($_SESSION['full_name'] ?? 'U', 0, 1)); ?>
                     </div>
-                    <span class="d-none d-md-inline"><?php echo $_SESSION['full_name'] ?? 'User'; ?></span>
-                    <i class="fas fa-chevron-down ms-2" style="font-size: 10px;"></i>
+                    <div class="user-info">
+                        <span class="user-name"><?php echo $_SESSION['full_name'] ?? 'User'; ?></span>
+                        <span class="user-role">Administrator</span>
+                    </div>
+                    <i class="fas fa-chevron-down ms-2" style="font-size: 10px; color: rgba(255,255,255,0.7);"></i>
                 </a>
-                <div class="dropdown-menu dropdown-menu-end" style="min-width: 220px;">
+                <div class="dropdown-menu dropdown-menu-end" style="min-width: 230px;">
                     <div class="dropdown-header">
                         <strong><?php echo $_SESSION['full_name'] ?? 'User'; ?></strong>
                         <p class="mb-0 small text-muted"><?php echo $_SESSION['email'] ?? 'user@example.com'; ?></p>
@@ -531,9 +558,6 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                     <a href="<?php echo $base_path; ?>modules/settings/index.php" class="dropdown-item">
                         <i class="fas fa-cog me-2"></i> Settings
                     </a>
-                    <a href="#" class="dropdown-item">
-                        <i class="fas fa-question-circle me-2"></i> Help & Support
-                    </a>
                     <div class="dropdown-divider"></div>
                     <a href="<?php echo $base_path; ?>logout.php" class="dropdown-item text-danger">
                         <i class="fas fa-sign-out-alt me-2"></i> Logout
@@ -543,11 +567,11 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
         </ul>
     </nav>
 
-    <!-- Enhanced Sidebar -->
+    <!-- Professional Sidebar -->
     <aside class="main-sidebar" id="mainSidebar">
         <div class="sidebar">
             <nav class="mt-2">
-                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+                <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
 
                     <!-- Dashboard -->
                     <li class="nav-item">
@@ -562,49 +586,58 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
 
                     <!-- Projects & Plots -->
                     <li class="nav-item <?php echo in_array($current_module, ['plots','projects']) ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-map-marked-alt"></i>
                             <span>Projects & Plots</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>All Projects</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/create.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/create.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Project</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/costs.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/projects/costs.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Project Costs</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/plots/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>All Plots</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/create.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/plots/create.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Plot</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Projects</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Project</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/costs.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Project Costs</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/creditors.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Project Creditors</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/projects/statements.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Creditor Statements</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Plots</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Plot</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/inventory.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Plot Inventory</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/plots/movements.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Movement</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Marketing & Leads -->
                     <li class="nav-item <?php echo ($current_module == 'marketing') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-bullhorn"></i>
                             <span>Marketing & Leads</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/leads.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Leads</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/create-lead.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Lead</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/online-bookings.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Online Bookings</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/campaigns.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Campaigns</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/quotations.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Sales Quotations</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/marketing/booking-link.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Booking Link</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Customers -->
                     <li class="nav-item <?php echo ($current_module == 'customers') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-users"></i>
                             <span>Customers</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Customers</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Customer</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/statements.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Customer Statements</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/debtors.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Debtors / AR</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/aging.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Debtors Aging</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/customers/writeoffs.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Write-offs</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Sales & Reservations -->
                     <li class="nav-item <?php echo ($current_module == 'sales') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-file-contract"></i>
                             <span>Sales & Reservations</span>
                         </a>
@@ -612,13 +645,14 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sales/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Reservations</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sales/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>New Reservation</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sales/contracts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Contracts</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sales/templates.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Contract Templates</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sales/cancellations.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Cancellations</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Land Services -->
                     <li class="nav-item <?php echo ($current_module == 'services') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-tools"></i>
                             <span>Land Services</span>
                         </a>
@@ -626,60 +660,107 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/services/types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Service Catalog</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/services/requests.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Service Requests</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/services/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>New Service Request</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/services/quotations.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Service Quotations</span></a></li>
+                        </ul>
+                    </li>
+                    
+                    <!-- Title Deed Processing -->
+                    <li class="nav-item <?php echo ($current_module == 'titledeed') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-certificate"></i>
+                            <span>Title Deed Processing</span>
+                            <span class="badge bg-info">12</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Processes</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/eligible.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Eligible Customers</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/initiate.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Initiate Processing</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/stages.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Processing Stages</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/costs.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Processing Costs</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/titledeed/completed.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Completed</span></a></li>
                         </ul>
                     </li>
 
                     <!-- FINANCIAL SECTION -->
                     <li class="nav-header">FINANCIAL MANAGEMENT</li>
 
-                    <!-- Payments -->
+                    <!-- Receipts/Income -->
                     <li class="nav-item <?php echo ($current_module == 'payments') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-money-bill-wave"></i>
-                            <span>Payments</span>
+                            <span>Receipts/Income</span>
                             <span class="badge bg-success">5</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Payments</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/record.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Record Payment</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Receipts</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/record.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Record Receipt</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/schedule.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payment Schedules</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/refunds.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Refunds</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payments/vouchers.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Vouchers & Receipts</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Expenses -->
-                    <li class="nav-item <?php echo ($current_module == 'expenses') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                    <!-- Payments/Expenses -->
+                    <li class="nav-item <?php echo ($current_module == 'expenses' || $current_module == 'payments') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-receipt"></i>
-                            <span>Expenses</span>
+                            <span>Payments/Expenses</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Expenses</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Submit Expense</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/create_claim.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Submit Claim</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/claims.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Claims</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/direct.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Direct Expenses</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Categories</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/expenses/categories.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Categories</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Petty Cash (NEW) -->
+                    <!-- Petty Cash -->
                     <li class="nav-item <?php echo ($current_module == 'petty_cash') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-wallet"></i>
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-cash-register"></i>
                             <span>Petty Cash</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/request.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Request Cash</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/petty_cash/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <!-- petty_cash/accounts.php not yet available -->
+                        </ul>
+                    </li>
+
+                    <!-- Assets -->
+                    <li class="nav-item <?php echo ($current_module == 'assets') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-laptop"></i>
+                            <span>Fixed Assets</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Loans -->
+                    <li class="nav-item <?php echo ($current_module == 'loans') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-hand-holding-usd"></i>
+                            <span>Loans</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/my-loans.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Loans</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/loan-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Types</span></a></li>
                         </ul>
                     </li>
 
                     <!-- Commissions -->
                     <li class="nav-item <?php echo ($current_module == 'commissions') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-percent"></i>
                             <span>Commissions</span>
                         </a>
@@ -692,13 +773,12 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
 
                     <!-- Accounting -->
                     <li class="nav-item <?php echo ($current_module == 'accounting') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-book"></i>
                             <span>Accounting</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Chart of Accounts</span></a></li>
-                            <!-- accounts_comprehensive.php not yet available -->
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/journal.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Journal Entries</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/ledger.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>General Ledger</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/accounting/trial.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Trial Balance</span></a></li>
@@ -707,13 +787,14 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
 
                     <!-- Finance & Banking -->
                     <li class="nav-item <?php echo in_array($current_module, ['finance','bank']) ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-university"></i>
                             <span>Finance & Banking</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/finance/bank_accounts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Bank Accounts</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/finance/bank_reconciliation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Bank Reconciliation</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/finance/cash_book.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Cash Book</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/finance/budgets.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Budgets</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/finance/creditors.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Creditors / AP</span></a></li>
                         </ul>
@@ -721,14 +802,14 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
 
                     <!-- Tax Management -->
                     <li class="nav-item <?php echo ($current_module == 'tax') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-file-invoice-dollar"></i>
                             <span>Tax Management</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tax/types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Tax Types</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tax/transactions.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Tax Transactions</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tax/reports.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Tax Reports</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tax/computation.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Tax Computation</span></a></li>
                         </ul>
                     </li>
 
@@ -737,7 +818,7 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
 
                     <!-- Procurement -->
                     <li class="nav-item <?php echo ($current_module == 'procurement') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-shopping-cart"></i>
                             <span>Procurement</span>
                         </a>
@@ -745,108 +826,60 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/procurement/requisitions.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Purchase Requisitions</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/procurement/orders.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Purchase Orders</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/procurement/suppliers.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Suppliers</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/procurement/contracts.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Supplier Contracts</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Inventory -->
-                    <li class="nav-item <?php echo ($current_module == 'inventory') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-boxes"></i>
-                            <span>Inventory</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/items.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Items</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/stores.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Store Locations</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/stock.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Levels</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/movements.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Movements</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/inventory/audit.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Stock Audit</span></a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Assets (NEW) -->
-                    <li class="nav-item <?php echo ($current_module == 'assets') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-warehouse"></i>
-                            <span>Assets</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/add.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/add.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Add Asset</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/list.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/list.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/assets/depreciation.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/assets/depreciation.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Depreciation</span></a></li>
-                            <!-- assets/categories.php not yet available -->
-                        </ul>
-                    </li>
-
-                    <!-- HR SECTION -->
-                    <li class="nav-header">HUMAN RESOURCES</li>
-
-                    <!-- HR -->
+                    <!-- Human Resources -->
                     <li class="nav-item <?php echo ($current_module == 'hr') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-user-tie"></i>
                             <span>Human Resources</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/employees.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Employees</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/attendance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Attendance</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/recruitment.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Recruitment</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/hr/payroll.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Leave Management (NEW) -->
+                    <!-- Leave Management -->
                     <li class="nav-item <?php echo ($current_module == 'leave') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-calendar-alt"></i>
                             <span>Leave Management</span>
                         </a>
                         <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/apply.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/apply.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Apply for Leave</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/my-leaves.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/my-leaves.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>My Leaves</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/balance.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/balance.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Leave Balance</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/approvals.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/approvals.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/leave-types.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/leave/leave-types.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Leave Types</span></a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Loans (NEW) -->
-                    <li class="nav-item <?php echo ($current_module == 'loans') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-hand-holding-usd"></i>
-                            <span>Loans</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/apply.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/apply.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Apply for Loan</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/my-loans.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/my-loans.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>My Loans</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/approvals.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/approvals.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/loans/loan-types.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/loans/loan-types.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Loan Products</span></a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Payroll (NEW) -->
-                    <li class="nav-item <?php echo ($current_module == 'payroll') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
-                            <i class="nav-icon fas fa-money-check-alt"></i>
-                            <span>Payroll</span>
-                        </a>
-                        <ul class="nav nav-treeview">
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/index.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/index.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/generate.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/generate.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Run Payroll</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payroll.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/payroll.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Process Payroll</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/payslips.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/payslips.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Payslips</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/payroll/history.php" class="nav-link <?php echo isActiveLink($base_path . 'modules/payroll/history.php', $current_full_path, $current_page, $current_module) ? 'active' : ''; ?>"><i class="far fa-circle nav-icon"></i><span>Payroll History</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Dashboard</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/apply.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Apply for Leave</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/my-leaves.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Leaves</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/balance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Balance</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/approvals.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Approvals</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/leave/leave-types.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Types</span></a></li>
                         </ul>
                     </li>
 
                     <!-- WORKFLOW SECTION -->
-                    <li class="nav-header">WORKFLOW</li>
+                    <li class="nav-header">WORKFLOW & COMMUNICATION</li>
+
+                    <!-- Task Management -->
+                    <li class="nav-item <?php echo ($current_module == 'tasks') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-tasks"></i>
+                            <span>Task Management</span>
+                            <span class="badge bg-primary">12</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tasks/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>All Tasks</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tasks/my-tasks.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>My Tasks</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tasks/assigned.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Tasks I Assigned</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tasks/create.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Create Task</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/tasks/pending-approval.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Pending Approval</span></a></li>
+                        </ul>
+                    </li>
 
                     <!-- Approvals -->
                     <li class="nav-item <?php echo ($current_module == 'approvals') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-check-double"></i>
                             <span>Approvals</span>
                             <span class="badge bg-warning">15</span>
@@ -858,38 +891,56 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                         </ul>
                     </li>
 
-                    <!-- Documents module not yet available -->
+                    <!-- Bulk SMS -->
+                    <li class="nav-item <?php echo ($current_module == 'sms') ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-sms"></i>
+                            <span>Bulk SMS</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/campaigns.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>SMS Campaigns</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/send.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Send SMS</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/history.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>SMS History</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/templates.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>SMS Templates</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/groups.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Contact Groups</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/sms/settings.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>SMS Settings</span></a></li>
+                        </ul>
+                    </li>
 
                     <!-- ANALYTICS SECTION -->
-                    <li class="nav-header">ANALYTICS</li>
+                    <li class="nav-header">REPORTS & ANALYTICS</li>
 
-                    <!-- Reports (UPDATED) -->
+                    <!-- Financial Reports -->
+                    <li class="nav-item <?php echo ($current_module == 'reports' && in_array($current_page, ['income.php','balance.php','cashflow.php','equity.php'])) ? 'menu-open' : ''; ?>">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
+                            <i class="nav-icon fas fa-file-invoice"></i>
+                            <span>Financial Statements</span>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/income.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Income Statement</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/balance.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Balance Sheet</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/cashflow.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Cash Flow Statement</span></a></li>
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/equity.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Changes in Equity</span></a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Reports -->
                     <li class="nav-item <?php echo ($current_module == 'reports') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-chart-bar"></i>
                             <span>Reports</span>
                         </a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/index.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Reports Hub</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/payroll-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Payroll Summary</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/leave-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Leave Report</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/loan-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Loan Report</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/asset-register.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Asset Register</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/depreciation-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Depreciation Report</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/employee-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Employee Report</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/expense-report.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Expense Report</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/reports/petty-cash-summary.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Petty Cash Summary</span></a></li>
                         </ul>
                     </li>
-
-                    <!-- Analytics module not yet available -->
 
                     <!-- SYSTEM SECTION -->
                     <li class="nav-header">SYSTEM</li>
 
                     <!-- Settings -->
                     <li class="nav-item <?php echo ($current_module == 'settings') ? 'menu-open' : ''; ?>">
-                        <a href="#" class="nav-link has-dropdown">
+                        <a href="#" class="nav-link" data-toggle="dropdown">
                             <i class="nav-icon fas fa-cog"></i>
                             <span>Settings</span>
                         </a>
@@ -898,12 +949,17 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/users.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>User Management</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/company.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Company Profile</span></a></li>
                             <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/roles.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Roles & Permissions</span></a></li>
-                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/integrations.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Integrations</span></a></li>
-                            <!-- settings/backup.php not yet available -->
+                            <li class="nav-item"><a href="<?php echo $base_path; ?>modules/settings/backup.php" class="nav-link"><i class="far fa-circle nav-icon"></i><span>Backup & Restore</span></a></li>
                         </ul>
                     </li>
 
-                    <!-- Audit Trail module not yet available -->
+                    <!-- Audit Trail -->
+                    <li class="nav-item">
+                        <a href="<?php echo $base_path; ?>modules/audit/index.php" class="nav-link">
+                            <i class="nav-icon fas fa-history"></i>
+                            <span>Audit Trail</span>
+                        </a>
+                    </li>
 
                 </ul>
             </nav>
@@ -913,69 +969,3 @@ function isActiveLink($link_href, $current_full_path, $current_page, $current_mo
     <!-- Content Wrapper -->
     <div class="content-wrapper">
         <!-- Your page content goes here -->
-
-<!-- Scripts at bottom -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-// Sidebar toggle functionality for mobile
-function toggleSidebar() {
-    document.getElementById('mainSidebar').classList.toggle('sidebar-open');
-}
-
-// Sidebar menu dropdown functionality
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize top navbar dropdowns in case data attributes are not auto-bound
-    if (typeof bootstrap !== 'undefined') {
-        document.querySelectorAll('.navbar .dropdown-toggle').forEach(function(el) {
-            new bootstrap.Dropdown(el);
-        });
-    }
-
-    // Handle sidebar menu dropdowns
-    var dropdownLinks = document.querySelectorAll('.nav-sidebar .nav-link.has-dropdown');
-    
-    dropdownLinks.forEach(function(element) {
-        element.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            var parent = this.closest('.nav-item');
-            if (!parent) return;
-            
-            var wasOpen = parent.classList.contains('menu-open');
-            
-            // Close all other open menus at the same level
-            var container = parent.parentElement;
-            if (container) {
-                var siblings = container.querySelectorAll('.nav-item.menu-open');
-                siblings.forEach(function(sibling) {
-                    if (sibling !== parent) {
-                        sibling.classList.remove('menu-open');
-                    }
-                });
-            }
-            
-            // Toggle current menu
-            if (wasOpen) {
-                parent.classList.remove('menu-open');
-            } else {
-                parent.classList.add('menu-open');
-            }
-        });
-    });
-    
-    // Keep current module menu open
-    document.querySelectorAll('.nav-item.menu-open').forEach(function(item) {
-        // Already has menu-open class from PHP, ensure it stays
-    });
-    
-    // Auto-open parent menu if a child link is active
-    const activeLinks = document.querySelectorAll('.nav-treeview .nav-link.active');
-    activeLinks.forEach(function(activeLink) {
-        const parentNavItem = activeLink.closest('.nav-item').parentElement.closest('.nav-item');
-        if (parentNavItem) {
-            parentNavItem.classList.add('menu-open');
-        }
-    });
-});
-</script>

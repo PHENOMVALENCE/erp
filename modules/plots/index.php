@@ -114,36 +114,246 @@ require_once '../../includes/header.php';
 ?>
 
 <style>
-.stats-card { background:#fff; border-radius:12px; padding:1.5rem; box-shadow:0 4px 12px rgba(0,0,0,0.08); border-left:5px solid; transition:0.2s; }
-.stats-card:hover { transform:translateY(-5px); }
-.stats-card.primary { border-left-color:#007bff; }
-.stats-card.success { border-left-color:#28a745; }
-.stats-card.warning { border-left-color:#ffc107; }
-.stats-card.info { border-left-color:#17a2b8; }
-.stats-card.danger { border-left-color:#dc3545; }
-.stats-card.purple { border-left-color:#6f42c1; }
-.stats-number { font-size:2.4rem; font-weight:700; }
-.stats-label { font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; color:#6c757d; }
+/* Stats Cards */
+.stats-card {
+    background: #fff;
+    border-radius: 6px;
+    padding: 0.875rem 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 3px solid;
+    height: 100%;
+}
 
-.status-badge { padding:0.4rem 0.9rem; border-radius:50px; font-size:0.8rem; font-weight:600; text-transform:capitalize; }
-.status-badge.available { background:#d4edda; color:#155724; }
-.status-badge.reserved { background:#fff3cd; color:#856404; }
-.status-badge.sold { background:#d1ecf1; color:#0c5460; }
-.status-badge.blocked { background:#f8d7da; color:#721c24; }
+.stats-card.primary { border-left-color: #007bff; }
+.stats-card.success { border-left-color: #28a745; }
+.stats-card.warning { border-left-color: #ffc107; }
+.stats-card.info { border-left-color: #17a2b8; }
+.stats-card.danger { border-left-color: #dc3545; }
+.stats-card.purple { border-left-color: #6f42c1; }
 
-/* Ensure links work */
-.btn-group a { pointer-events: auto !important; }
-table tbody tr { cursor: default !important; }
+.stats-number {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 0.15rem;
+    line-height: 1;
+}
+
+.stats-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.status-badge.available {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.reserved {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.sold {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.blocked {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Table Styling */
+.table-professional {
+    font-size: 0.85rem;
+}
+
+.table-professional thead th {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    color: #495057;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+    padding: 0.65rem 0.5rem;
+    white-space: nowrap;
+}
+
+.table-professional tbody td {
+    padding: 0.65rem 0.5rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.table-professional tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Table Cell Specific Styling */
+.plot-number {
+    font-weight: 700;
+    color: #2c3e50;
+    font-size: 0.9rem;
+}
+
+.block-number {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.project-info {
+    line-height: 1.3;
+}
+
+.project-code {
+    display: block;
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.1rem;
+}
+
+.project-name {
+    font-weight: 500;
+    color: #2c3e50;
+    font-size: 0.85rem;
+}
+
+.area-value {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.85rem;
+}
+
+.price-value {
+    font-weight: 600;
+    color: #2c3e50;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+.price-discount {
+    display: block;
+    font-size: 0.75rem;
+    color: #dc3545;
+    text-decoration: line-through;
+    margin-bottom: 0.1rem;
+}
+
+.customer-name {
+    color: #495057;
+    font-size: 0.85rem;
+}
+
+/* Action Buttons */
+.action-btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    border-radius: 3px;
+    margin-right: 0.2rem;
+    margin-bottom: 0.2rem;
+    white-space: nowrap;
+}
+
+.btn-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+}
+
+/* Cards */
+.filter-card {
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+}
+
+.main-card {
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    color: #dee2e6;
+    margin-bottom: 1rem;
+}
+
+.empty-state p {
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+/* DataTables Overrides */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+    font-size: 0.875rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.375rem 0.75rem;
+    margin: 0 0.125rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .stats-number {
+        font-size: 1.5rem;
+    }
+    
+    .stats-label {
+        font-size: 0.7rem;
+    }
+    
+    .btn-actions {
+        flex-direction: column;
+    }
+    
+    .action-btn {
+        margin-right: 0;
+        width: 100%;
+    }
+}
 </style>
 
 <div class="content-header">
     <div class="container-fluid">
-        <div class="row mb-2 align-items-center">
+        <div class="row mb-3 align-items-center">
             <div class="col-sm-6">
-                <h1 class="m-0">Plots Management</h1>
+                <h1 class="m-0" style="font-size: 1.5rem;">Plots Management</h1>
             </div>
             <div class="col-sm-6 text-end">
-                <a href="create.php" class="btn btn-primary btn-lg">Add New Plot</a>
+                <a href="create.php" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Add New Plot
+                </a>
             </div>
         </div>
     </div>
@@ -151,35 +361,71 @@ table tbody tr { cursor: default !important; }
 
 <div class="container-fluid">
 
-    <!-- Stats -->
-    <div class="row g-3 mb-4">
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card primary"><div class="stats-number"><?= number_format($stats['total_plots']) ?></div><div class="stats-label">Total Plots</div></div></div>
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card success"><div class="stats-number"><?= number_format($stats['available_plots']) ?></div><div class="stats-label">Available</div></div></div>
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card warning"><div class="stats-number"><?= number_format($stats['reserved_plots']) ?></div><div class="stats-label">Reserved</div></div></div>
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card info"><div class="stats-number"><?= number_format($stats['sold_plots']) ?></div><div class="stats-label">Sold</div></div></div>
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card purple"><div class="stats-number"><?= number_format($stats['total_area']) ?></div><div class="stats-label">Total m²</div></div></div>
-        <div class="col-xl-2 col-md-4 col-6"><div class="stats-card danger"><div class="stats-number">TSH <?= number_format($stats['total_revenue']/1000000, 1) ?>M</div><div class="stats-label">Revenue</div></div></div>
+    <!-- Statistics Cards -->
+    <div class="row g-2 mb-3">
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card primary">
+                <div class="stats-number"><?= number_format($stats['total_plots']) ?></div>
+                <div class="stats-label">Total Plots</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card success">
+                <div class="stats-number"><?= number_format($stats['available_plots']) ?></div>
+                <div class="stats-label">Available</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card warning">
+                <div class="stats-number"><?= number_format($stats['reserved_plots']) ?></div>
+                <div class="stats-label">Reserved</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card info">
+                <div class="stats-number"><?= number_format($stats['sold_plots']) ?></div>
+                <div class="stats-label">Sold</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card purple">
+                <div class="stats-number"><?= number_format($stats['total_area'], 0) ?></div>
+                <div class="stats-label">Total m²</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="stats-card danger">
+                <div class="stats-number"><?= number_format($stats['total_revenue']/1000000, 1) ?>M</div>
+                <div class="stats-label">Revenue (TSH)</div>
+            </div>
+        </div>
     </div>
 
-    <!-- Filters -->
-    <div class="card mb-4">
+    <!-- Filter Card -->
+    <div class="card filter-card mb-3">
         <div class="card-body">
-            <form method="GET" action="" class="row g-3 align-items-end">
+            <form method="GET" action="" class="row g-2 align-items-end">
                 <div class="col-md-4">
-                    <input type="text" name="search" class="form-control" placeholder="Search plot, block, project..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+                    <label class="form-label small fw-semibold text-muted mb-1">SEARCH</label>
+                    <input type="text" name="search" class="form-control form-control-sm" 
+                           placeholder="Plot number, block, or project..." 
+                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
                 </div>
                 <div class="col-md-3">
-                    <select name="project_id" class="form-select">
+                    <label class="form-label small fw-semibold text-muted mb-1">PROJECT</label>
+                    <select name="project_id" class="form-select form-select-sm">
                         <option value="">All Projects</option>
                         <?php foreach ($projects as $p): ?>
-                            <option value="<?= $p['project_id'] ?>" <?= ($_GET['project_id'] ?? '') == $p['project_id'] ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($p['project_name']) ?> (<?= $p['plot_count'] ?> plots)
+                            <option value="<?= $p['project_id'] ?>" 
+                                    <?= ($_GET['project_id'] ?? '') == $p['project_id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($p['project_name']) ?> (<?= $p['plot_count'] ?>)
                             </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <select name="status" class="form-select">
+                    <label class="form-label small fw-semibold text-muted mb-1">STATUS</label>
+                    <select name="status" class="form-select form-select-sm">
                         <option value="">All Status</option>
                         <option value="available" <?= ($_GET['status'] ?? '') === 'available' ? 'selected' : '' ?>>Available</option>
                         <option value="reserved" <?= ($_GET['status'] ?? '') === 'reserved' ? 'selected' : '' ?>>Reserved</option>
@@ -188,34 +434,36 @@ table tbody tr { cursor: default !important; }
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-filter me-1"></i>Filter
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Table -->
-    <div class="card">
+    <!-- Table Card -->
+    <div class="card main-card">
         <div class="card-body">
             <?php if (empty($plots)): ?>
-                <div class="text-center py-5">
-                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">No plots found</p>
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No plots found matching your criteria</p>
                 </div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-hover" id="plotsTable">
-                        <thead class="table-light">
+                    <table class="table table-professional table-hover" id="plotsTable">
+                        <thead>
                             <tr>
-                                <th>Plot Number</th>
+                                <th>Plot No.</th>
                                 <th>Block</th>
                                 <th>Project</th>
-                                <th>Area (m²)</th>
-                                <th>Price/m²</th>
-                                <th>Total Price</th>
+                                <th class="text-end">Area (m²)</th>
+                                <th class="text-end">Price/m²</th>
+                                <th class="text-end">Total Price</th>
                                 <th>Status</th>
                                 <th>Customer</th>
-                                <th style="width: 180px;">Actions</th>
+                                <th class="text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -224,32 +472,46 @@ table tbody tr { cursor: default !important; }
                                 $customer = $customer ?: '-';
                             ?>
                                 <tr>
-                                    <td><strong><?= htmlspecialchars($p['plot_number']) ?></strong></td>
-                                    <td><?= htmlspecialchars($p['block_number'] ?: '-') ?></td>
+                                    <td class="plot-number"><?= htmlspecialchars($p['plot_number']) ?></td>
+                                    <td class="block-number"><?= htmlspecialchars($p['block_number'] ?: '-') ?></td>
                                     <td>
-                                        <small class="text-muted"><?= htmlspecialchars($p['project_code'] ?: '') ?></small><br>
-                                        <?= htmlspecialchars($p['project_name'] ?: 'Unknown') ?>
+                                        <div class="project-info">
+                                            <span class="project-code"><?= htmlspecialchars($p['project_code'] ?: '') ?></span>
+                                            <span class="project-name"><?= htmlspecialchars($p['project_name'] ?: 'Unknown') ?></span>
+                                        </div>
                                     </td>
-                                    <td><?= number_format($p['area'], 2) ?></td>
-                                    <td>TSH <?= number_format($p['price_per_sqm']) ?></td>
-                                    <td>
+                                    <td class="text-end area-value"><?= number_format($p['area'], 2) ?></td>
+                                    <td class="text-end price-value">
+                                        <?= number_format($p['price_per_sqm'], 0) ?>
+                                    </td>
+                                    <td class="text-end">
                                         <?php if ($p['discount_amount'] > 0): ?>
-                                            <small class="text-muted text-decoration-line-through">TSH <?= number_format($p['selling_price']) ?></small><br>
+                                            <span class="price-discount"><?= number_format($p['selling_price'], 0) ?></span>
                                         <?php endif; ?>
-                                        <strong>TSH <?= number_format($p['final_price']) ?></strong>
+                                        <span class="price-value"><?= number_format($p['final_price'], 0) ?></span>
                                     </td>
-                                    <td><span class="status-badge <?= $p['status'] ?>"><?= ucfirst($p['status']) ?></span></td>
-                                    <td><?= htmlspecialchars($customer) ?></td>
                                     <td>
-                                        <a href="view.php?id=<?= $p['plot_id'] ?>" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye"></i> View
-                                        </a>
-                                        <a href="edit.php?id=<?= $p['plot_id'] ?>" class="btn btn-sm btn-outline-warning">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDelete(<?= $p['plot_id'] ?>, '<?= htmlspecialchars(addslashes($p['plot_number'])) ?>')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                        <span class="status-badge <?= $p['status'] ?>">
+                                            <?= ucfirst($p['status']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="customer-name"><?= htmlspecialchars($customer) ?></td>
+                                    <td>
+                                        <div class="btn-actions">
+                                            <a href="view.php?id=<?= $p['plot_id'] ?>" 
+                                               class="btn btn-sm btn-outline-primary action-btn">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                            <a href="edit.php?id=<?= $p['plot_id'] ?>" 
+                                               class="btn btn-sm btn-outline-warning action-btn">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger action-btn" 
+                                                    onclick="confirmDelete(<?= $p['plot_id'] ?>, '<?= htmlspecialchars(addslashes($p['plot_number'])) ?>')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -267,25 +529,41 @@ table tbody tr { cursor: default !important; }
                 $(document).ready(function() {
                     $('#plotsTable').DataTable({
                         pageLength: 25,
+                        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
                         responsive: true,
-                        order: [[2, 'asc']],
+                        order: [[2, 'asc'], [0, 'asc']],
                         columnDefs: [
                             { 
-                                targets: 8, 
+                                targets: [3, 4, 5],
+                                className: 'text-end'
+                            },
+                            { 
+                                targets: 8,
                                 orderable: false,
-                                className: 'dt-body-nowrap'
+                                className: 'text-center'
                             }
                         ],
-                        // Prevent row click interfering with buttons
+                        language: {
+                            search: "Search:",
+                            lengthMenu: "Show _MENU_ entries",
+                            info: "Showing _START_ to _END_ of _TOTAL_ plots",
+                            infoEmpty: "Showing 0 to 0 of 0 plots",
+                            infoFiltered: "(filtered from _MAX_ total plots)",
+                            paginate: {
+                                first: "First",
+                                last: "Last",
+                                next: "Next",
+                                previous: "Previous"
+                            }
+                        },
                         drawCallback: function() {
-                            // Remove any row click handlers
                             $('#plotsTable tbody tr').off('click');
                         }
                     });
                 });
 
                 function confirmDelete(id, num) {
-                    if (confirm('Delete plot ' + num + '? This action cannot be undone.')) {
+                    if (confirm('Are you sure you want to delete plot "' + num + '"?\n\nThis action cannot be undone.')) {
                         window.location.href = 'delete.php?id=' + id;
                     }
                 }

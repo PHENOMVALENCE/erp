@@ -14,316 +14,488 @@ $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 $user_id = $_SESSION['user_id'];
 
-// Handle AJAX requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
-    header('Content-Type: application/json');
+// ==================== HANDLE FORM SUBMISSIONS ====================
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
-    try {
-        if ($_POST['action'] === 'calculate_commission') {
-            // Validate required fields
-            if (empty($_POST['reservation_id']) || empty($_POST['commission_rate'])) {
-                throw new Exception('Reservation and commission rate are required');
-            }
-            
-            // Validate agent selection
-            $recipient_type = $_POST['recipient_type'] ?? 'user';
-            if ($recipient_type === 'user' && empty($_POST['user_id'])) {
-                throw new Exception('Please select a user');
-            }
-            if (($recipient_type === 'external' || $recipient_type === 'consultant') && empty($_POST['recipient_name'])) {
-                throw new Exception('Please enter recipient name');
-            }
-            
-            // Get reservation details
-            $reservation_stmt = $conn->prepare("
-                SELECT r.*, c.first_name, c.last_name, p.plot_number, pr.project_name
-                FROM reservations r
-                INNER JOIN customers c ON r.customer_id = c.customer_id
-                INNER JOIN plots p ON r.plot_id = p.plot_id
-                INNER JOIN projects pr ON p.project_id = pr.project_id
-                WHERE r.reservation_id = ? AND r.company_id = ?
-            ");
-            $reservation_stmt->execute([$_POST['reservation_id'], $company_id]);
-            $reservation = $reservation_stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$reservation) {
-                throw new Exception('Reservation not found');
-            }
-            
-            // Check if commission already exists for this reservation and recipient
-            if ($recipient_type === 'user') {
-                $check = $conn->prepare("
-                    SELECT commission_id FROM commissions 
-                    WHERE reservation_id = ? AND user_id = ? AND company_id = ?
-                ");
-                $check->execute([$_POST['reservation_id'], $_POST['user_id'], $company_id]);
-            } else {
-                $check = $conn->prepare("
-                    SELECT commission_id FROM commissions 
-                    WHERE reservation_id = ? AND recipient_name = ? AND company_id = ?
-                ");
-                $check->execute([$_POST['reservation_id'], $_POST['recipient_name'], $company_id]);
-            }
-            
-            if ($check->rowCount() > 0) {
-                throw new Exception('Commission already exists for this reservation and recipient');
-            }
-            
-            // Calculate commission
-            $commission_rate = (float)$_POST['commission_rate'];
-            $reservation_amount = (float)$reservation['total_amount'];
-            $commission_amount = ($reservation_amount * $commission_rate) / 100;
-            
-            // Get recipient name
-            $recipient_name = '';
-            $recipient_phone = $_POST['recipient_phone'] ?? null;
-            
-            if ($recipient_type === 'user') {
-                $user_stmt = $conn->prepare("SELECT first_name, last_name, phone1 FROM users WHERE user_id = ?");
-                $user_stmt->execute([$_POST['user_id']]);
-                $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
-                $recipient_name = $user_data['first_name'] . ' ' . $user_data['last_name'];
-                $recipient_phone = $recipient_phone ?: $user_data['phone1'];
-            } else {
-                $recipient_name = $_POST['recipient_name'];
-            }
-            
-            // Insert commission
-            $stmt = $conn->prepare("
-                INSERT INTO commissions (
-                    company_id, reservation_id, recipient_type, user_id, recipient_name,
-                    recipient_phone, commission_type, commission_percentage, commission_amount,
-                    payment_status, remarks, created_by, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NOW())
-            ");
-            
-            $stmt->execute([
-                $company_id,
-                $_POST['reservation_id'],
-                $recipient_type,
-                ($recipient_type === 'user' ? $_POST['user_id'] : null),
-                $recipient_name,
-                $recipient_phone,
-                $_POST['commission_type'] ?? 'sales',
-                $commission_rate,
-                $commission_amount,
-                $_POST['remarks'] ?? null,
-                $user_id
-            ]);
-            
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Commission calculated and saved successfully',
-                'commission_amount' => $commission_amount
-            ]);
-            
-        } elseif ($_POST['action'] === 'update_commission') {
-            if (empty($_POST['commission_id'])) {
-                throw new Exception('Commission ID is required');
-            }
-            
-            // Check if commission is still pending
-            $check = $conn->prepare("
-                SELECT payment_status FROM commissions 
-                WHERE commission_id = ? AND company_id = ?
-            ");
-            $check->execute([$_POST['commission_id'], $company_id]);
-            $commission = $check->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$commission) {
-                throw new Exception('Commission not found');
-            }
-            
-            if ($commission['payment_status'] !== 'pending') {
-                throw new Exception('Only pending commissions can be updated');
-            }
-            
-            $stmt = $conn->prepare("
-                UPDATE commissions SET
-                    commission_percentage = ?,
-                    commission_amount = ?,
-                    remarks = ?,
-                    updated_at = NOW()
-                WHERE commission_id = ? AND company_id = ?
-            ");
-            
-            $stmt->execute([
-                $_POST['commission_percentage'],
-                $_POST['commission_amount'],
-                $_POST['remarks'] ?? null,
-                $_POST['commission_id'],
-                $company_id
-            ]);
-            
-            echo json_encode(['success' => true, 'message' => 'Commission updated successfully']);
-            
-        } elseif ($_POST['action'] === 'delete_commission') {
-            if (empty($_POST['commission_id'])) {
-                throw new Exception('Commission ID is required');
-            }
-            
-            // Check if commission is still pending
-            $check = $conn->prepare("
-                SELECT payment_status FROM commissions 
-                WHERE commission_id = ? AND company_id = ?
-            ");
-            $check->execute([$_POST['commission_id'], $company_id]);
-            $commission = $check->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$commission) {
-                throw new Exception('Commission not found');
-            }
-            
-            if ($commission['payment_status'] !== 'pending') {
-                throw new Exception('Only pending commissions can be deleted');
-            }
-            
-            $stmt = $conn->prepare("DELETE FROM commissions WHERE commission_id = ? AND company_id = ?");
-            $stmt->execute([$_POST['commission_id'], $company_id]);
-            
-            echo json_encode(['success' => true, 'message' => 'Commission deleted successfully']);
-            
-        } elseif ($_POST['action'] === 'get_commission') {
-            if (empty($_POST['commission_id'])) {
-                throw new Exception('Commission ID is required');
-            }
-            
-            $stmt = $conn->prepare("
-                SELECT 
-                    c.*,
-                    r.reservation_number,
-                    r.reservation_date,
-                    r.total_amount as reservation_amount,
-                    cu.first_name as customer_first_name,
-                    cu.last_name as customer_last_name,
-                    p.plot_number,
-                    pr.project_name
-                FROM commissions c
-                INNER JOIN reservations r ON c.reservation_id = r.reservation_id
-                INNER JOIN customers cu ON r.customer_id = cu.customer_id
-                INNER JOIN plots p ON r.plot_id = p.plot_id
-                INNER JOIN projects pr ON p.project_id = pr.project_id
-                WHERE c.commission_id = ? AND c.company_id = ?
-            ");
-            $stmt->execute([$_POST['commission_id'], $company_id]);
-            $commission = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$commission) {
-                throw new Exception('Commission not found');
-            }
-            
-            echo json_encode(['success' => true, 'commission' => $commission]);
-        }
+    if (isset($_POST['action'])) {
+        $action = $_POST['action'];
         
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        try {
+            $conn->beginTransaction();
+            
+            // CREATE NEW COMMISSION
+            if ($action === 'create_commission') {
+                
+                // Generate commission number
+                $year = date('Y');
+                $count_sql = "SELECT COUNT(*) FROM commissions WHERE company_id = ? AND YEAR(commission_date) = ?";
+                $count_stmt = $conn->prepare($count_sql);
+                $count_stmt->execute([$company_id, $year]);
+                $count = $count_stmt->fetchColumn() + 1;
+                $commission_number = 'COM-' . $year . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+                
+                // Get reservation and plot details
+                $reservation_id = $_POST['reservation_id'];
+                $res_sql = "SELECT r.*, p.selling_price, p.discount_amount 
+                           FROM reservations r
+                           JOIN plots p ON r.plot_id = p.plot_id
+                           WHERE r.reservation_id = ? AND r.company_id = ?";
+                $res_stmt = $conn->prepare($res_sql);
+                $res_stmt->execute([$reservation_id, $company_id]);
+                $reservation = $res_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$reservation) {
+                    throw new Exception("Reservation not found");
+                }
+                
+                // Calculate amounts
+                $base_amount = $reservation['total_amount'];
+                $plot_size_sqm = $reservation['plot_size'] ?? 0; // Get plot size from reservation query
+                $commission_percentage = floatval($_POST['commission_percentage']);
+                $commission_amount = ($base_amount * $commission_percentage) / 100;
+                
+                // Withholding tax (default 5%)
+                $withholding_tax_rate = floatval($_POST['withholding_tax_rate'] ?? 5.00);
+                $withholding_tax_amount = ($commission_amount * $withholding_tax_rate) / 100;
+                $entitled_amount = $commission_amount - $withholding_tax_amount;
+                
+                // Prepare recipient data based on type
+                $recipient_type = $_POST['recipient_type'] ?? 'user';
+                $user_id_value = null;
+                $recipient_name = '';
+                $recipient_phone = '';
+                
+                if ($recipient_type === 'user') {
+                    $user_id_value = $_POST['user_id'];
+                    // Get user details
+                    $user_sql = "SELECT full_name, phone1 FROM users WHERE user_id = ?";
+                    $user_stmt = $conn->prepare($user_sql);
+                    $user_stmt->execute([$user_id_value]);
+                    $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
+                    $recipient_name = $user_data['full_name'] ?? '';
+                    $recipient_phone = $user_data['phone1'] ?? '';
+                } else {
+                    // External or consultant
+                    $recipient_name = $_POST['recipient_name'];
+                    $recipient_phone = $_POST['recipient_phone'] ?? '';
+                }
+                
+                // Insert commission
+                $insert_sql = "INSERT INTO commissions (
+                    company_id, commission_number, commission_date, commission_type,
+                    reservation_id, plot_size_sqm, recipient_type, user_id, recipient_name, recipient_phone,
+                    base_amount, commission_percentage, commission_amount,
+                    withholding_tax_rate, withholding_tax_amount, entitled_amount, balance,
+                    payment_status, notes, created_by, submitted_by, submitted_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW(), NOW())";
+                
+                $insert_stmt = $conn->prepare($insert_sql);
+                $insert_stmt->execute([
+                    $company_id,
+                    $commission_number,
+                    $_POST['commission_date'],
+                    $_POST['commission_type'],
+                    $reservation_id,
+                    $plot_size_sqm,
+                    $recipient_type,
+                    $user_id_value,
+                    $recipient_name,
+                    $recipient_phone,
+                    $base_amount,
+                    $commission_percentage,
+                    $commission_amount,
+                    $withholding_tax_rate,
+                    $withholding_tax_amount,
+                    $entitled_amount,
+                    $entitled_amount, // Initial balance = entitled amount
+                    $_POST['notes'] ?? null,
+                    $user_id,
+                    $user_id
+                ]);
+                
+                $commission_id = $conn->lastInsertId();
+                
+                // Record tax transaction
+                $tax_transaction_number = 'TAX-WHT-' . $year . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+                $tax_sql = "INSERT INTO tax_transactions (
+                    company_id, transaction_number, transaction_date, transaction_type,
+                    tax_type_id, taxable_amount, tax_amount, total_amount,
+                    description, status, created_by, created_at
+                ) VALUES (?, ?, ?, 'withholding',
+                    (SELECT tax_type_id FROM tax_types WHERE tax_code = 'WHT' AND company_id = ? LIMIT 1),
+                    ?, ?, ?, ?, 'pending', ?, NOW())";
+                
+                $tax_stmt = $conn->prepare($tax_sql);
+                $tax_stmt->execute([
+                    $company_id,
+                    $tax_transaction_number,
+                    $_POST['commission_date'],
+                    $company_id,
+                    $commission_amount,
+                    $withholding_tax_amount,
+                    $commission_amount + $withholding_tax_amount,
+                    "Withholding tax for commission {$commission_number}",
+                    $user_id
+                ]);
+                
+                $conn->commit();
+                $_SESSION['success'] = "Commission {$commission_number} created successfully and submitted for approval!";
+                header("Location: index.php");
+                exit;
+            }
+            
+            // EDIT COMMISSION
+            elseif ($action === 'edit_commission') {
+                
+                $commission_id = $_POST['commission_id'];
+                
+                // Check if commission is still pending
+                $check_sql = "SELECT payment_status FROM commissions WHERE commission_id = ? AND company_id = ?";
+                $check_stmt = $conn->prepare($check_sql);
+                $check_stmt->execute([$commission_id, $company_id]);
+                $status = $check_stmt->fetchColumn();
+                
+                if ($status !== 'pending') {
+                    throw new Exception("Can only edit pending commissions");
+                }
+                
+                // Recalculate amounts
+                $reservation_id = $_POST['reservation_id'];
+                $res_sql = "SELECT r.total_amount, p.area_sqm as plot_size 
+                           FROM reservations r
+                           JOIN plots p ON r.plot_id = p.plot_id
+                           WHERE r.reservation_id = ? AND r.company_id = ?";
+                $res_stmt = $conn->prepare($res_sql);
+                $res_stmt->execute([$reservation_id, $company_id]);
+                $reservation = $res_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                $base_amount = $reservation['total_amount'];
+                $plot_size_sqm = $reservation['plot_size'] ?? 0;
+                
+                $commission_percentage = floatval($_POST['commission_percentage']);
+                $commission_amount = ($base_amount * $commission_percentage) / 100;
+                
+                $withholding_tax_rate = floatval($_POST['withholding_tax_rate'] ?? 5.00);
+                $withholding_tax_amount = ($commission_amount * $withholding_tax_rate) / 100;
+                $entitled_amount = $commission_amount - $withholding_tax_amount;
+                
+                // Update commission
+                $update_sql = "UPDATE commissions SET
+                    commission_date = ?, commission_type = ?, user_id = ?, plot_size_sqm = ?,
+                    commission_percentage = ?, commission_amount = ?,
+                    withholding_tax_rate = ?, withholding_tax_amount = ?,
+                    entitled_amount = ?, balance = ?, notes = ?, updated_at = NOW()
+                    WHERE commission_id = ? AND company_id = ?";
+                
+                $update_stmt = $conn->prepare($update_sql);
+                $update_stmt->execute([
+                    $_POST['commission_date'],
+                    $_POST['commission_type'],
+                    $_POST['user_id'],
+                    $plot_size_sqm,
+                    $commission_percentage,
+                    $commission_amount,
+                    $withholding_tax_rate,
+                    $withholding_tax_amount,
+                    $entitled_amount,
+                    $entitled_amount,
+                    $_POST['notes'] ?? null,
+                    $commission_id,
+                    $company_id
+                ]);
+                
+                // Update tax transaction (find by description pattern)
+                $commission_number_query = "SELECT commission_number FROM commissions WHERE commission_id = ? AND company_id = ?";
+                $cn_stmt = $conn->prepare($commission_number_query);
+                $cn_stmt->execute([$commission_id, $company_id]);
+                $commission_number = $cn_stmt->fetchColumn();
+                
+                $update_tax_sql = "UPDATE tax_transactions SET
+                    taxable_amount = ?, tax_amount = ?, transaction_date = ?, total_amount = ?
+                    WHERE description LIKE ? AND company_id = ? AND transaction_type = 'withholding'";
+                
+                $update_tax_stmt = $conn->prepare($update_tax_sql);
+                $update_tax_stmt->execute([
+                    $commission_amount,
+                    $withholding_tax_amount,
+                    $_POST['commission_date'],
+                    $commission_amount + $withholding_tax_amount,
+                    "%{$commission_number}%",
+                    $company_id
+                ]);
+                
+                $conn->commit();
+                $_SESSION['success'] = "Commission updated successfully!";
+                header("Location: index.php");
+                exit;
+            }
+            
+            // DELETE COMMISSION
+            elseif ($action === 'delete_commission') {
+                
+                $commission_id = $_POST['commission_id'];
+                
+                // Check if can delete
+                $check_sql = "SELECT payment_status, total_paid FROM commissions 
+                             WHERE commission_id = ? AND company_id = ?";
+                $check_stmt = $conn->prepare($check_sql);
+                $check_stmt->execute([$commission_id, $company_id]);
+                $comm = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($comm['payment_status'] === 'paid' || $comm['total_paid'] > 0) {
+                    throw new Exception("Cannot delete commission with payments");
+                }
+                
+                // Get commission number for tax transaction lookup
+                $cn_query = "SELECT commission_number FROM commissions WHERE commission_id = ? AND company_id = ?";
+                $cn_stmt = $conn->prepare($cn_query);
+                $cn_stmt->execute([$commission_id, $company_id]);
+                $commission_number = $cn_stmt->fetchColumn();
+                
+                // Delete tax transaction (find by description pattern)
+                $del_tax_sql = "DELETE FROM tax_transactions 
+                               WHERE description LIKE ? AND company_id = ? AND transaction_type = 'withholding'";
+                $del_tax_stmt = $conn->prepare($del_tax_sql);
+                $del_tax_stmt->execute(["%{$commission_number}%", $company_id]);
+                
+                // Delete commission
+                $del_sql = "DELETE FROM commissions WHERE commission_id = ? AND company_id = ?";
+                $del_stmt = $conn->prepare($del_sql);
+                $del_stmt->execute([$commission_id, $company_id]);
+                
+                $conn->commit();
+                $_SESSION['success'] = "Commission deleted successfully!";
+                header("Location: index.php");
+                exit;
+            }
+            
+            // RECORD PAYMENT
+            elseif ($action === 'record_payment') {
+                
+                $commission_id = $_POST['commission_id'];
+                
+                // Check if commission is approved
+                $check_sql = "SELECT payment_status, COALESCE(balance, 0) as balance, 
+                             commission_number, entitled_amount, COALESCE(total_paid, 0) as total_paid 
+                             FROM commissions WHERE commission_id = ? AND company_id = ?";
+                $check_stmt = $conn->prepare($check_sql);
+                $check_stmt->execute([$commission_id, $company_id]);
+                $comm = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($comm['payment_status'] !== 'approved') {
+                    throw new Exception("Can only record payments for approved commissions");
+                }
+                
+                $payment_amount = floatval($_POST['payment_amount']);
+                
+                if ($payment_amount <= 0) {
+                    throw new Exception("Payment amount must be greater than zero");
+                }
+                
+                if ($payment_amount > $comm['balance']) {
+                    throw new Exception("Payment amount cannot exceed balance: TZS " . number_format($comm['balance'], 2));
+                }
+                
+                // Generate payment number
+                $year = date('Y');
+                $count_sql = "SELECT COUNT(*) FROM commission_payments WHERE company_id = ? AND YEAR(payment_date) = ?";
+                $count_stmt = $conn->prepare($count_sql);
+                $count_stmt->execute([$company_id, $year]);
+                $count = $count_stmt->fetchColumn() + 1;
+                $payment_number = 'PAY-' . $year . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+                
+                // Insert payment
+                $insert_payment_sql = "INSERT INTO commission_payments (
+                    commission_id, company_id, payment_number, payment_date, payment_amount,
+                    payment_method, reference_number, bank_account_id, notes, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                
+                $insert_payment_stmt = $conn->prepare($insert_payment_sql);
+                $insert_payment_stmt->execute([
+                    $commission_id,
+                    $company_id,
+                    $payment_number,
+                    $_POST['payment_date'],
+                    $payment_amount,
+                    $_POST['payment_method'],
+                    $_POST['reference_number'] ?? null,
+                    !empty($_POST['bank_account_id']) ? $_POST['bank_account_id'] : null,
+                    $_POST['payment_notes'] ?? null,
+                    $user_id
+                ]);
+                
+                // Update commission totals
+                $new_total_paid = $comm['total_paid'] + $payment_amount;
+                $new_balance = $comm['balance'] - $payment_amount;
+                $new_status = ($new_balance <= 0.01) ? 'paid' : 'approved';
+                
+                $update_comm_sql = "UPDATE commissions SET
+                    total_paid = ?, balance = ?, payment_status = ?,
+                    paid_by = ?, paid_at = NOW(), updated_at = NOW()
+                    WHERE commission_id = ? AND company_id = ?";
+                
+                $update_comm_stmt = $conn->prepare($update_comm_sql);
+                $update_comm_stmt->execute([
+                    $new_total_paid,
+                    $new_balance,
+                    $new_status,
+                    $user_id,
+                    $commission_id,
+                    $company_id
+                ]);
+                
+                $conn->commit();
+                $_SESSION['success'] = "Payment of TZS " . number_format($payment_amount, 2) . " recorded successfully!";
+                header("Location: index.php");
+                exit;
+            }
+            
+        } catch (Exception $e) {
+            $conn->rollBack();
+            $_SESSION['error'] = "Error: " . $e->getMessage();
+            error_log("Commission error: " . $e->getMessage());
+        }
     }
-    exit;
 }
 
-// Fetch commissions
+// ==================== FETCH COMMISSIONS ====================
+$where = ['c.company_id = ?'];
+$params = [$company_id];
+
+// Apply filters
+if (!empty($_GET['status'])) {
+    $where[] = 'c.payment_status = ?';
+    $params[] = $_GET['status'];
+}
+
+if (!empty($_GET['user_id'])) {
+    $where[] = 'c.user_id = ?';
+    $params[] = $_GET['user_id'];
+}
+
+if (!empty($_GET['search'])) {
+    $search = '%' . $_GET['search'] . '%';
+    $where[] = '(c.commission_number LIKE ? OR cust.full_name LIKE ? OR r.reservation_number LIKE ?)';
+    $params[] = $search;
+    $params[] = $search;
+    $params[] = $search;
+}
+
+$where_clause = 'WHERE ' . implode(' AND ', $where);
+
 try {
-    $status_filter = $_GET['status'] ?? 'all';
+    $commissions_sql = "SELECT c.*,
+                              r.reservation_number,
+                              r.total_amount as reservation_total,
+                              COALESCE(u.full_name, c.recipient_name) as recipient_name_display,
+                              u.full_name as user_full_name,
+                              u.email as recipient_email,
+                              u.phone1 as user_phone,
+                              c.recipient_name,
+                              c.recipient_phone,
+                              c.recipient_type,
+                              cust.full_name as customer_name,
+                              pl.plot_number,
+                              pr.project_name,
+                              sb.full_name as submitted_by_name,
+                              ab.full_name as approved_by_name,
+                              pb.full_name as paid_by_name
+                       FROM commissions c
+                       JOIN reservations r ON c.reservation_id = r.reservation_id
+                       JOIN customers cust ON r.customer_id = cust.customer_id
+                       JOIN plots pl ON r.plot_id = pl.plot_id
+                       JOIN projects pr ON pl.project_id = pr.project_id
+                       LEFT JOIN users u ON c.user_id = u.user_id
+                       LEFT JOIN users sb ON c.submitted_by = sb.user_id
+                       LEFT JOIN users ab ON c.approved_by = ab.user_id
+                       LEFT JOIN users pb ON c.paid_by = pb.user_id
+                       {$where_clause}
+                       ORDER BY c.created_at DESC
+                       LIMIT 1000";
     
-    $where_conditions = ["c.company_id = ?"];
-    $params = [$company_id];
-    
-    if ($status_filter !== 'all') {
-        $where_conditions[] = "c.payment_status = ?";
-        $params[] = $status_filter;
-    }
-    
-    $where_clause = implode(' AND ', $where_conditions);
-    
-    $stmt = $conn->prepare("
-        SELECT 
-            c.*,
-            r.reservation_number,
-            r.reservation_date,
-            r.total_amount as reservation_amount,
-            cu.first_name as customer_first_name,
-            cu.last_name as customer_last_name,
-            p.plot_number,
-            pr.project_name,
-            creator.first_name as creator_first_name,
-            creator.last_name as creator_last_name,
-            cp.payment_date,
-            cp.amount_paid
-        FROM commissions c
-        INNER JOIN reservations r ON c.reservation_id = r.reservation_id
-        INNER JOIN customers cu ON r.customer_id = cu.customer_id
-        INNER JOIN plots p ON r.plot_id = p.plot_id
-        INNER JOIN projects pr ON p.project_id = pr.project_id
-        LEFT JOIN users creator ON c.created_by = creator.user_id
-        LEFT JOIN commission_payments cp ON c.commission_id = cp.commission_id
-        WHERE $where_clause
-        ORDER BY c.created_at DESC
-    ");
+    $stmt = $conn->prepare($commissions_sql);
     $stmt->execute($params);
     $commissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get statistics
-    $stats = $conn->prepare("
-        SELECT 
-            COUNT(*) as total_commissions,
-            COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_count,
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END), 0) as paid_count,
-            COALESCE(SUM(CASE WHEN payment_status = 'cancelled' THEN 1 ELSE 0 END), 0) as cancelled_count,
-            COALESCE(SUM(commission_amount), 0) as total_amount,
-            COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN commission_amount ELSE 0 END), 0) as pending_amount,
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN commission_amount ELSE 0 END), 0) as paid_amount
-        FROM commissions 
-        WHERE company_id = ?
-    ");
-    $stats->execute([$company_id]);
-    $statistics = $stats->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $commissions = [];
+    error_log("Error fetching commissions: " . $e->getMessage());
+}
+
+// ==================== STATISTICS ====================
+try {
+    $stats_sql = "SELECT 
+                    COALESCE(COUNT(*), 0) as total_commissions,
+                    COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_count,
+                    COALESCE(SUM(CASE WHEN payment_status = 'approved' THEN 1 ELSE 0 END), 0) as approved_count,
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END), 0) as paid_count,
+                    COALESCE(SUM(commission_amount), 0) as total_commission_amount,
+                    COALESCE(SUM(withholding_tax_amount), 0) as total_tax,
+                    COALESCE(SUM(entitled_amount), 0) as total_entitled,
+                    COALESCE(SUM(total_paid), 0) as total_paid_out,
+                    COALESCE(SUM(balance), 0) as total_outstanding
+                  FROM commissions
+                  WHERE company_id = ?";
     
-    // Get unpaid reservations (for commission calculation)
-    $unpaid_reservations = $conn->prepare("
-        SELECT 
-            r.reservation_id,
-            r.reservation_number,
-            r.reservation_date,
-            r.total_amount,
-            c.first_name,
-            c.last_name,
-            p.plot_number,
-            pr.project_name
-        FROM reservations r
-        INNER JOIN customers c ON r.customer_id = c.customer_id
-        INNER JOIN plots p ON r.plot_id = p.plot_id
-        INNER JOIN projects pr ON p.project_id = pr.project_id
-        LEFT JOIN commissions com ON r.reservation_id = com.reservation_id
-        WHERE r.company_id = ? 
-        AND r.status = 'active'
-        AND com.commission_id IS NULL
-        ORDER BY r.reservation_date DESC
-    ");
-    $unpaid_reservations->execute([$company_id]);
-    $available_reservations = $unpaid_reservations->fetchAll(PDO::FETCH_ASSOC);
+    $stats_stmt = $conn->prepare($stats_sql);
+    $stats_stmt->execute([$company_id]);
+    $stats_result = $stats_stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Get users for dropdown (sales team)
-    $users_stmt = $conn->prepare("
-        SELECT u.user_id, u.first_name, u.last_name, u.email, u.phone1
-        FROM users u
-        WHERE u.company_id = ? 
-        AND u.is_active = 1
-        AND u.can_get_commission = 1
-        ORDER BY u.first_name, u.last_name
-    ");
-    $users_stmt->execute([$company_id]);
-    $users = $users_stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Ensure all values are numeric, not null
+    $stats = [
+        'total_commissions' => intval($stats_result['total_commissions'] ?? 0),
+        'pending_count' => intval($stats_result['pending_count'] ?? 0),
+        'approved_count' => intval($stats_result['approved_count'] ?? 0),
+        'paid_count' => intval($stats_result['paid_count'] ?? 0),
+        'total_commission_amount' => floatval($stats_result['total_commission_amount'] ?? 0),
+        'total_tax' => floatval($stats_result['total_tax'] ?? 0),
+        'total_entitled' => floatval($stats_result['total_entitled'] ?? 0),
+        'total_paid_out' => floatval($stats_result['total_paid_out'] ?? 0),
+        'total_outstanding' => floatval($stats_result['total_outstanding'] ?? 0)
+    ];
     
 } catch (PDOException $e) {
-    $error_message = "Error fetching commissions: " . $e->getMessage();
-    $commissions = [];
-    $statistics = [
-        'total_commissions' => 0, 'pending_count' => 0, 'paid_count' => 0, 
-        'cancelled_count' => 0, 'total_amount' => 0,
-        'pending_amount' => 0, 'paid_amount' => 0
+    $stats = [
+        'total_commissions' => 0,
+        'pending_count' => 0,
+        'approved_count' => 0,
+        'paid_count' => 0,
+        'total_commission_amount' => 0,
+        'total_tax' => 0,
+        'total_entitled' => 0,
+        'total_paid_out' => 0,
+        'total_outstanding' => 0
     ];
-    $available_reservations = [];
+}
+
+// ==================== FETCH USERS (SALES TEAM) ====================
+try {
+    $users_sql = "SELECT user_id, full_name, email FROM users 
+                  WHERE company_id = ? AND is_active = 1 
+                  ORDER BY full_name";
+    $users_stmt = $conn->prepare($users_sql);
+    $users_stmt->execute([$company_id]);
+    $users = $users_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
     $users = [];
+}
+
+// ==================== FETCH RESERVATIONS FOR DROPDOWN ====================
+try {
+    $reservations_sql = "SELECT r.reservation_id, r.reservation_number, r.total_amount,
+                               c.full_name as customer_name, pl.plot_number, pr.project_name
+                        FROM reservations r
+                        JOIN customers c ON r.customer_id = c.customer_id
+                        JOIN plots pl ON r.plot_id = pl.plot_id
+                        JOIN projects pr ON pl.project_id = pr.project_id
+                        WHERE r.company_id = ? AND r.status = 'active'
+                        ORDER BY r.created_at DESC
+                        LIMIT 500";
+    $res_stmt = $conn->prepare($reservations_sql);
+    $res_stmt->execute([$company_id]);
+    $reservations = $res_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $reservations = [];
 }
 
 $page_title = 'Commission Management';
@@ -331,508 +503,550 @@ require_once '../../includes/header.php';
 ?>
 
 <style>
-.commission-card {
-    border-radius: 12px;
-    border: none;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+/* Stats Cards */
+.stats-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    border-left: 4px solid;
     transition: all 0.3s;
 }
 
-.commission-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+.stats-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 
-.stats-card {
-    border-radius: 12px;
-    border: none;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+.stats-card.primary { border-left-color: #3b82f6; }
+.stats-card.warning { border-left-color: #f59e0b; }
+.stats-card.success { border-left-color: #10b981; }
+.stats-card.info { border-left-color: #06b6d4; }
+.stats-card.purple { border-left-color: #8b5cf6; }
+.stats-card.danger { border-left-color: #ef4444; }
+
+.stats-number {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
 }
 
+.stats-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+/* Status Badges */
 .status-badge {
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 11px;
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
-.card {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+.status-badge.pending {
+    background: #fef3c7;
+    color: #92400e;
 }
 
-.card-header {
+.status-badge.approved {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-badge.paid {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-badge.cancelled {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+/* Table Styling */
+.table-professional {
+    font-size: 0.875rem;
+}
+
+.table-professional thead th {
+    background: #f9fafb;
+    border-bottom: 2px solid #e5e7eb;
+    color: #374151;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+    padding: 0.75rem 0.5rem;
+}
+
+.table-professional tbody td {
+    padding: 0.75rem 0.5rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.table-professional tbody tr:hover {
+    background-color: #fafafa;
+}
+
+/* Cards */
+.main-card {
     background: #fff;
-    border-bottom: 2px solid #f3f4f6;
-    border-radius: 12px 12px 0 0 !important;
-    padding: 1.25rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+}
+
+.filter-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+}
+
+/* Modal Enhancements */
+.modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-bottom: none;
+}
+
+.modal-header .btn-close {
+    filter: brightness(0) invert(1);
 }
 
 .form-label {
     font-weight: 600;
     color: #374151;
+    font-size: 0.875rem;
     margin-bottom: 0.5rem;
 }
 
-.form-control, .form-select {
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
-    padding: 0.625rem 0.875rem;
+.required {
+    color: #ef4444;
 }
 
-.btn {
-    border-radius: 8px;
-    padding: 0.625rem 1.25rem;
-    font-weight: 500;
+/* Action Buttons */
+.btn-action {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    margin-right: 0.25rem;
 }
 
-.filter-tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-}
-
-.filter-tab {
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: 2px solid #e5e7eb;
-    background: #fff;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.filter-tab:hover {
-    border-color: #667eea;
-}
-
-.filter-tab.active {
-    background: #667eea;
-    color: #fff;
-    border-color: #667eea;
-}
-
-.commission-amount {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #059669;
-}
-
-.recipient-type-option {
-    padding: 1rem;
-    border: 2px solid #e5e7eb;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
+/* Empty State */
+.empty-state {
     text-align: center;
+    padding: 4rem 2rem;
 }
 
-.recipient-type-option:hover {
-    border-color: #667eea;
-    background: #f9fafb;
+.empty-state i {
+    font-size: 4rem;
+    color: #e5e7eb;
+    margin-bottom: 1rem;
 }
 
-.recipient-type-option.active {
-    border-color: #667eea;
-    background: #ede9fe;
+.empty-state p {
+    color: #6b7280;
+    font-size: 1.125rem;
 }
 
-.recipient-type-option input[type="radio"] {
-    display: none;
+/* Info Box */
+.info-box {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.info-box strong {
+    color: #1e40af;
 }
 </style>
 
-<!-- Content Header -->
 <div class="content-header">
     <div class="container-fluid">
-        <div class="row mb-4">
+        <div class="row mb-3 align-items-center">
             <div class="col-sm-6">
-                <h1 class="m-0 fw-bold">
-                    <i class="fas fa-percentage text-primary me-2"></i>Commission Management
-                </h1>
-                <p class="text-muted small mb-0 mt-1">Calculate and track sales commissions</p>
+                <h1 class="m-0"><i class="fas fa-percent"></i> Commission Management</h1>
             </div>
-            <div class="col-sm-6">
-                <div class="float-sm-end">
-                    <button class="btn btn-primary" onclick="showCommissionModal()">
-                        <i class="fas fa-plus me-2"></i>Calculate Commission
-                    </button>
-                </div>
+            <div class="col-sm-6 text-end">
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createCommissionModal">
+                    <i class="fas fa-plus me-1"></i>Create Commission
+                </button>
+                <a href="structures.php" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-cog me-1"></i>Structures
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Main content -->
-<section class="content">
-    <div class="container-fluid">
-        
-        <?php if (isset($error_message)): ?>
-        <div class="alert alert-danger alert-dismissible fade show">
-            <i class="fas fa-exclamation-triangle me-2"></i><?php echo $error_message; ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        <?php endif; ?>
-        
-        <!-- Statistics Cards -->
-        <div class="row g-3 mb-4">
-            <div class="col-xl-3 col-md-6">
-                <div class="card stats-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h6 class="text-muted mb-2">Total</h6>
-                                <h2 class="fw-bold mb-0"><?php echo (int)$statistics['total_commissions']; ?></h2>
-                            </div>
-                            <div class="fs-1 text-primary">
-                                <i class="fas fa-list"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-xl-3 col-md-6">
-                <div class="card stats-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h6 class="text-muted mb-2">Pending</h6>
-                                <h2 class="fw-bold mb-0 text-warning"><?php echo (int)$statistics['pending_count']; ?></h2>
-                            </div>
-                            <div class="fs-1 text-warning">
-                                <i class="fas fa-clock"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-xl-3 col-md-6">
-                <div class="card stats-card">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h6 class="text-muted mb-2">Paid</h6>
-                                <h2 class="fw-bold mb-0 text-success"><?php echo (int)$statistics['paid_count']; ?></h2>
-                            </div>
-                            <div class="fs-1 text-success">
-                                <i class="fas fa-money-bill-wave"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-xl-3 col-md-6">
-                <div class="card stats-card">
-                    <div class="card-body">
-                        <h6 class="text-muted mb-2">Total Value</h6>
-                        <h2 class="fw-bold mb-2">TZS <?php echo number_format((float)$statistics['total_amount'], 0); ?></h2>
-                        <div class="row g-2 small">
-                            <div class="col-6">
-                                <span class="text-warning">●</span> Pending: TZS <?php echo number_format((float)$statistics['pending_amount'], 0); ?>
-                            </div>
-                            <div class="col-6">
-                                <span class="text-success">●</span> Paid: TZS <?php echo number_format((float)$statistics['paid_amount'], 0); ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+<div class="container-fluid">
+
+    <?php if (isset($_SESSION['success'])): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <i class="fas fa-check-circle"></i> <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (isset($_SESSION['error'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <i class="fas fa-exclamation-triangle"></i> <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+    </div>
+    <?php endif; ?>
+
+    <!-- Info Box -->
+    <div class="info-box">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Commission Workflow:</strong> 
+        All new commissions are created with <strong>Pending</strong> status and must be approved in the 
+        <a href="../approvals/pending.php" class="text-primary"><u>Approvals</u></a> module before payment can be processed.
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card primary">
+                <div class="stats-number"><?= number_format($stats['total_commissions'] ?? 0) ?></div>
+                <div class="stats-label">Total Commissions</div>
             </div>
         </div>
-        
-        <!-- Filter Tabs -->
-        <div class="filter-tabs">
-            <div class="filter-tab <?php echo $status_filter === 'all' ? 'active' : ''; ?>" 
-                 onclick="filterByStatus('all')">
-                <i class="fas fa-globe me-1"></i>All
-            </div>
-            <div class="filter-tab <?php echo $status_filter === 'pending' ? 'active' : ''; ?>" 
-                 onclick="filterByStatus('pending')">
-                <i class="fas fa-clock me-1"></i>Pending
-            </div>
-            <div class="filter-tab <?php echo $status_filter === 'paid' ? 'active' : ''; ?>" 
-                 onclick="filterByStatus('paid')">
-                <i class="fas fa-money-bill-wave me-1"></i>Paid
-            </div>
-            <div class="filter-tab <?php echo $status_filter === 'cancelled' ? 'active' : ''; ?>" 
-                 onclick="filterByStatus('cancelled')">
-                <i class="fas fa-times-circle me-1"></i>Cancelled
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card warning">
+                <div class="stats-number"><?= number_format($stats['pending_count'] ?? 0) ?></div>
+                <div class="stats-label">Pending Approval</div>
             </div>
         </div>
-        
-        <!-- Commissions List -->
-        <?php if (count($commissions) > 0): ?>
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-list me-2"></i>Commission Records
-                </h5>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card success">
+                <div class="stats-number"><?= number_format($stats['paid_count'] ?? 0) ?></div>
+                <div class="stats-label">Paid</div>
             </div>
-            <div class="card-body">
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card danger">
+                <div class="stats-number"><?= number_format($stats['total_outstanding'] ?? 0, 0) ?></div>
+                <div class="stats-label">Outstanding (TSH)</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card info">
+                <div class="stats-number"><?= number_format($stats['total_commission_amount'] ?? 0, 0) ?></div>
+                <div class="stats-label">Total Commission (TSH)</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card purple">
+                <div class="stats-number"><?= number_format($stats['total_tax'] ?? 0, 0) ?></div>
+                <div class="stats-label">Withholding Tax (TSH)</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card success">
+                <div class="stats-number"><?= number_format($stats['total_entitled'] ?? 0, 0) ?></div>
+                <div class="stats-label">Net Entitled (TSH)</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stats-card info">
+                <div class="stats-number"><?= number_format($stats['total_paid_out'] ?? 0, 0) ?></div>
+                <div class="stats-label">Total Paid (TSH)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card filter-card mb-3">
+        <div class="card-body">
+            <form method="GET" action="" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-muted mb-1">SEARCH</label>
+                    <input type="text" name="search" class="form-control form-control-sm" 
+                           placeholder="Commission number, customer..." 
+                           value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">RECIPIENT</label>
+                    <select name="user_id" class="form-select form-select-sm">
+                        <option value="">All Recipients</option>
+                        <?php foreach ($users as $u): ?>
+                            <option value="<?= $u['user_id'] ?>" 
+                                    <?= ($_GET['user_id'] ?? '') == $u['user_id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($u['full_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">STATUS</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">All Status</option>
+                        <option value="pending" <?= ($_GET['status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
+                        <option value="approved" <?= ($_GET['status'] ?? '') === 'approved' ? 'selected' : '' ?>>Approved</option>
+                        <option value="paid" <?= ($_GET['status'] ?? '') === 'paid' ? 'selected' : '' ?>>Paid</option>
+                        <option value="rejected" <?= ($_GET['status'] ?? '') === 'rejected' ? 'selected' : '' ?>>Rejected</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-filter me-1"></i>Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card main-card">
+        <div class="card-body">
+            <?php if (empty($commissions)): ?>
+                <div class="empty-state">
+                    <i class="fas fa-percent"></i>
+                    <p>No commissions found</p>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCommissionModal">
+                        <i class="fas fa-plus me-1"></i>Create First Commission
+                    </button>
+                </div>
+            <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-hover" id="commissionsTable">
+                    <table class="table table-professional table-hover" id="commissionsTable">
                         <thead>
                             <tr>
-                                <th>Reservation Details</th>
+                                <th>Commission #</th>
+                                <th>Date</th>
                                 <th>Recipient</th>
-                                <th>Type</th>
-                                <th>Rate</th>
-                                <th>Amount</th>
+                                <th>Customer</th>
+                                <th>Reservation</th>
+                                <th class="text-end">Base Amount</th>
+                                <th class="text-center">Rate %</th>
+                                <th class="text-end">Commission</th>
+                                <th class="text-end">WHT (5%)</th>
+                                <th class="text-end">Net Entitled</th>
+                                <th class="text-end">Balance</th>
                                 <th>Status</th>
-                                <th>Created</th>
-                                <th>Actions</th>
+                                <th class="text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($commissions as $commission): ?>
-                            <tr>
-                                <td>
-                                    <strong><?php echo htmlspecialchars($commission['customer_first_name'] . ' ' . $commission['customer_last_name']); ?></strong><br>
-                                    <small class="text-muted">
-                                        <?php echo htmlspecialchars($commission['project_name']); ?> - 
-                                        Plot <?php echo htmlspecialchars($commission['plot_number']); ?>
-                                    </small><br>
-                                    <small class="text-muted">
-                                        Amount: TZS <?php echo number_format((float)$commission['reservation_amount'], 0); ?>
-                                    </small>
-                                </td>
-                                <td>
-                                    <strong><?php echo htmlspecialchars($commission['recipient_name']); ?></strong>
-                                    <span class="badge bg-secondary ms-1"><?php echo ucfirst($commission['recipient_type']); ?></span>
-                                    <?php if ($commission['recipient_phone']): ?>
-                                    <br><small class="text-muted"><?php echo htmlspecialchars($commission['recipient_phone']); ?></small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge bg-info">
-                                        <?php echo ucfirst($commission['commission_type']); ?>
-                                    </span>
-                                </td>
-                                <td><?php echo number_format((float)$commission['commission_percentage'], 2); ?>%</td>
-                                <td>
-                                    <span class="commission-amount">
-                                        TZS <?php echo number_format((float)$commission['commission_amount'], 2); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="status-badge <?php 
-                                        echo match($commission['payment_status']) {
-                                            'pending' => 'bg-warning text-dark',
-                                            'paid' => 'bg-success text-white',
-                                            'cancelled' => 'bg-danger text-white',
-                                            default => 'bg-secondary text-white'
-                                        };
-                                    ?>">
-                                        <?php echo ucfirst($commission['payment_status']); ?>
-                                    </span>
-                                    <?php if ($commission['payment_status'] === 'paid' && $commission['payment_date']): ?>
-                                    <br><small class="text-success">
-                                        Paid: <?php echo date('M d, Y', strtotime($commission['payment_date'])); ?>
-                                    </small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php echo htmlspecialchars($commission['creator_first_name'] . ' ' . $commission['creator_last_name']); ?>
-                                    <br><small class="text-muted"><?php echo date('M d, Y', strtotime($commission['created_at'])); ?></small>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-primary" onclick="viewCommission(<?php echo $commission['commission_id']; ?>)" title="View">
+                            <?php foreach ($commissions as $c): ?>
+                                <tr>
+                                    <td>
+                                        <strong><?= htmlspecialchars($c['commission_number']) ?></strong>
+                                        <br><small class="text-muted"><?= ucfirst($c['commission_type']) ?></small>
+                                    </td>
+                                    <td><?= date('d M Y', strtotime($c['commission_date'])) ?></td>
+                                    <td>
+                                        <strong><?= htmlspecialchars($c['recipient_name_display']) ?></strong>
+                                        <?php if ($c['recipient_type'] !== 'user'): ?>
+                                        <br><small class="badge bg-info"><?= ucfirst($c['recipient_type']) ?></small>
+                                        <?php endif; ?>
+                                        <?php if ($c['recipient_phone']): ?>
+                                        <br><small class="text-muted"><i class="fas fa-phone"></i> <?= htmlspecialchars($c['recipient_phone']) ?></small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= htmlspecialchars($c['customer_name']) ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($c['reservation_number']) ?>
+                                        <br><small class="text-muted"><?= htmlspecialchars($c['project_name']) ?></small>
+                                    </td>
+                                    <td class="text-end"><?= number_format($c['base_amount'], 0) ?></td>
+                                    <td class="text-center"><strong><?= $c['commission_percentage'] ?>%</strong></td>
+                                    <td class="text-end"><strong><?= number_format($c['commission_amount'], 0) ?></strong></td>
+                                    <td class="text-end text-danger"><?= number_format($c['withholding_tax_amount'], 0) ?></td>
+                                    <td class="text-end"><strong><?= number_format($c['entitled_amount'], 0) ?></strong></td>
+                                    <td class="text-end">
+                                        <?php if ($c['balance'] > 0): ?>
+                                            <span class="text-danger fw-bold"><?= number_format($c['balance'], 0) ?></span>
+                                        <?php else: ?>
+                                            <span class="text-success">Paid</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><span class="status-badge <?= $c['payment_status'] ?>"><?= ucfirst($c['payment_status']) ?></span></td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-info btn-action" 
+                                                onclick='viewCommission(<?= json_encode($c, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'
+                                                title="View Details">
                                             <i class="fas fa-eye"></i>
                                         </button>
-                                        <?php if ($commission['payment_status'] === 'pending'): ?>
-                                        <button class="btn btn-outline-success" onclick="editCommission(<?php echo $commission['commission_id']; ?>)" title="Edit">
+                                        
+                                        <?php if ($c['payment_status'] === 'approved' && $c['balance'] > 0): ?>
+                                        <button class="btn btn-sm btn-outline-success btn-action" 
+                                                onclick='recordPayment(<?= json_encode($c, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'
+                                                title="Record Payment">
+                                            <i class="fas fa-money-bill-wave"></i>
+                                        </button>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (in_array($c['payment_status'], ['approved', 'paid'])): ?>
+                                        <a href="statement.php?commission_id=<?= $c['commission_id'] ?>" 
+                                           class="btn btn-sm btn-outline-primary btn-action"
+                                           title="View Statement">
+                                            <i class="fas fa-file-invoice"></i>
+                                        </a>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($c['payment_status'] === 'pending'): ?>
+                                        <button class="btn btn-sm btn-outline-warning btn-action" 
+                                                onclick='editCommission(<?= json_encode($c, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'
+                                                title="Edit">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-outline-danger" onclick="deleteCommission(<?php echo $commission['commission_id']; ?>)" title="Delete">
+                                        <button class="btn btn-sm btn-outline-danger btn-action" 
+                                                onclick="deleteCommission(<?= $c['commission_id'] ?>, '<?= htmlspecialchars(addslashes($c['commission_number'])) ?>')"
+                                                title="Delete">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                         <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
-            </div>
+            <?php endif; ?>
         </div>
-        <?php else: ?>
-        <div class="card">
-            <div class="card-body text-center py-5">
-                <i class="fas fa-percentage fa-4x text-muted mb-4"></i>
-                <h4 class="text-muted">No Commissions Found</h4>
-                <p class="text-muted">Calculate commissions for completed reservations</p>
-                <button class="btn btn-primary mt-3" onclick="showCommissionModal()">
-                    <i class="fas fa-plus me-2"></i>Calculate First Commission
-                </button>
-            </div>
-        </div>
-        <?php endif; ?>
-        
     </div>
-</section>
+</div>
 
-<!-- Commission Modal -->
-<div class="modal fade" id="commissionModal" tabindex="-1">
+<!-- CREATE COMMISSION MODAL -->
+<div class="modal fade" id="createCommissionModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-percentage me-2"></i>
-                    <span id="modalTitle">Calculate Commission</span>
-                </h5>
+                <h5 class="modal-title"><i class="fas fa-plus-circle"></i> Create New Commission</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="commissionForm">
+            <form method="POST" action="">
+                <input type="hidden" name="action" value="create_commission">
                 <div class="modal-body">
-                    <input type="hidden" name="ajax" value="1">
-                    <input type="hidden" name="action" value="calculate_commission">
-                    <input type="hidden" name="commission_id" id="commission_id">
-                    
                     <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label">Reservation <span class="text-danger">*</span></label>
-                            <select class="form-select" name="reservation_id" id="reservation_id" required onchange="updateReservationInfo()">
-                                <option value="">-- Select Reservation --</option>
-                                <?php foreach ($available_reservations as $reservation): ?>
-                                <option value="<?php echo $reservation['reservation_id']; ?>" 
-                                        data-amount="<?php echo $reservation['total_amount']; ?>"
-                                        data-customer="<?php echo htmlspecialchars($reservation['first_name'] . ' ' . $reservation['last_name']); ?>"
-                                        data-plot="<?php echo htmlspecialchars($reservation['plot_number']); ?>"
-                                        data-project="<?php echo htmlspecialchars($reservation['project_name']); ?>">
-                                    <?php echo htmlspecialchars($reservation['first_name'] . ' ' . $reservation['last_name']); ?> - 
-                                    <?php echo htmlspecialchars($reservation['project_name']); ?> 
-                                    (Plot <?php echo htmlspecialchars($reservation['plot_number']); ?>) - 
-                                    TZS <?php echo number_format((float)$reservation['total_amount'], 0); ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
                         
-                        <div class="col-12" id="reservationInfoDiv" style="display: none;">
-                            <div class="alert alert-info">
-                                <h6 class="fw-bold mb-2">Reservation Information</h6>
-                                <div class="row">
-                                    <div class="col-6">
-                                        <small class="text-muted">Customer:</small><br>
-                                        <strong id="info_customer"></strong>
-                                    </div>
-                                    <div class="col-6">
-                                        <small class="text-muted">Amount:</small><br>
-                                        <strong id="info_amount"></strong>
-                                    </div>
-                                    <div class="col-12 mt-2">
-                                        <small class="text-muted">Property:</small><br>
-                                        <strong id="info_property"></strong>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-12">
-                            <label class="form-label">Recipient Type <span class="text-danger">*</span></label>
-                            <div class="row g-2">
-                                <div class="col-md-4">
-                                    <label class="recipient-type-option active">
-                                        <input type="radio" name="recipient_type" value="user" checked onchange="toggleRecipientFields()">
-                                        <div>
-                                            <i class="fas fa-user fa-2x mb-2 text-primary"></i>
-                                            <div class="fw-bold">System User</div>
-                                            <small class="text-muted">Employee</small>
-                                        </div>
-                                    </label>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="recipient-type-option">
-                                        <input type="radio" name="recipient_type" value="external" onchange="toggleRecipientFields()">
-                                        <div>
-                                            <i class="fas fa-user-tie fa-2x mb-2 text-success"></i>
-                                            <div class="fw-bold">External Agent</div>
-                                            <small class="text-muted">Third party</small>
-                                        </div>
-                                    </label>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="recipient-type-option">
-                                        <input type="radio" name="recipient_type" value="consultant" onchange="toggleRecipientFields()">
-                                        <div>
-                                            <i class="fas fa-handshake fa-2x mb-2 text-info"></i>
-                                            <div class="fw-bold">Consultant</div>
-                                            <small class="text-muted">Advisor</small>
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-12" id="userSelectDiv">
-                            <label class="form-label">Select User <span class="text-danger">*</span></label>
-                            <select class="form-select" name="user_id" id="user_id">
-                                <option value="">-- Select User --</option>
-                                <?php foreach ($users as $usr): ?>
-                                <option value="<?php echo $usr['user_id']; ?>">
-                                    <?php echo htmlspecialchars($usr['first_name'] . ' ' . $usr['last_name']); ?> - 
-                                    <?php echo htmlspecialchars($usr['email']); ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
-                        <div class="col-12" id="manualRecipientDiv" style="display: none;">
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label class="form-label">Recipient Name <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" name="recipient_name" id="recipient_name" 
-                                           placeholder="Enter recipient name">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Phone Number</label>
-                                    <input type="text" class="form-control" name="recipient_phone" id="recipient_phone" 
-                                           placeholder="e.g., 0712345678">
-                                </div>
-                            </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Commission Date <span class="required">*</span></label>
+                            <input type="date" name="commission_date" class="form-control" 
+                                   value="<?= date('Y-m-d') ?>" required>
                         </div>
                         
                         <div class="col-md-6">
-                            <label class="form-label">Commission Type <span class="text-danger">*</span></label>
-                            <select class="form-select" name="commission_type" id="commission_type" required>
+                            <label class="form-label">Commission Type <span class="required">*</span></label>
+                            <select name="commission_type" class="form-select" required>
                                 <option value="sales">Sales Commission</option>
                                 <option value="referral">Referral Commission</option>
-                                <option value="marketing">Marketing Commission</option>
-                                <option value="consultant">Consultant Fee</option>
-                                <option value="other">Other</option>
+                                <option value="milestone">Milestone Bonus</option>
+                                <option value="bonus">Performance Bonus</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Reservation <span class="required">*</span></label>
+                            <select name="reservation_id" id="create_reservation_id" class="form-select" required onchange="loadReservationDetails(this.value, 'create')">
+                                <option value="">-- Select Reservation --</option>
+                                <?php foreach ($reservations as $r): ?>
+                                    <option value="<?= $r['reservation_id'] ?>" 
+                                            data-amount="<?= $r['total_amount'] ?>"
+                                            data-customer="<?= htmlspecialchars($r['customer_name']) ?>"
+                                            data-plot="<?= htmlspecialchars($r['plot_number']) ?>"
+                                            data-project="<?= htmlspecialchars($r['project_name']) ?>">
+                                        <?= htmlspecialchars($r['reservation_number']) ?> - 
+                                        <?= htmlspecialchars($r['customer_name']) ?> - 
+                                        <?= htmlspecialchars($r['project_name']) ?> - 
+                                        TZS <?= number_format($r['total_amount'], 0) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <div id="create_reservation_details" class="alert alert-info" style="display:none;">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Recipient Type <span class="required">*</span></label>
+                            <select name="recipient_type" id="create_recipient_type" class="form-select" required onchange="toggleRecipientFields('create')">
+                                <option value="user">System User (Employee)</option>
+                                <option value="external">External Agent</option>
+                                <option value="consultant">Consultant</option>
                             </select>
                         </div>
                         
                         <div class="col-md-6">
-                            <label class="form-label">Commission Rate (%) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" name="commission_rate" id="commission_rate" 
-                                   step="0.01" min="0" max="100" required onchange="calculateAmount()">
+                            <label class="form-label">Recipient (Sales Person) <span class="required">*</span></label>
+                            <select name="user_id" id="create_user_id" class="form-select">
+                                <option value="">-- Select Recipient --</option>
+                                <?php foreach ($users as $u): ?>
+                                    <option value="<?= $u['user_id'] ?>" 
+                                            data-name="<?= htmlspecialchars($u['full_name']) ?>"
+                                            data-phone="<?= htmlspecialchars($u['phone1'] ?? '') ?>">
+                                        <?= htmlspecialchars($u['full_name']) ?> - <?= htmlspecialchars($u['email']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         
-                        <div class="col-12">
-                            <label class="form-label">Commission Amount (TZS)</label>
-                            <input type="number" class="form-control" name="commission_amount" id="commission_amount" 
-                                   step="0.01" min="0" readonly>
-                            <small class="text-muted">Automatically calculated based on reservation amount and rate</small>
+                        <div class="col-md-6" id="create_recipient_name_div" style="display:none;">
+                            <label class="form-label">Recipient Name <span class="required">*</span></label>
+                            <input type="text" name="recipient_name" id="create_recipient_name" class="form-control" placeholder="Enter recipient name">
                         </div>
                         
-                        <div class="col-12">
-                            <label class="form-label">Remarks</label>
-                            <textarea class="form-control" name="remarks" id="remarks" rows="3" 
-                                      placeholder="Additional notes or comments"></textarea>
+                        <div class="col-md-6" id="create_recipient_phone_div" style="display:none;">
+                            <label class="form-label">Recipient Phone</label>
+                            <input type="text" name="recipient_phone" id="create_recipient_phone" class="form-control" placeholder="Enter phone number">
                         </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Commission Percentage (%) <span class="required">*</span></label>
+                            <input type="number" name="commission_percentage" id="create_commission_percentage" 
+                                   class="form-control" step="0.01" min="0" max="100" value="2.50" 
+                                   required onchange="calculateCommission('create')">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Withholding Tax Rate (%) <span class="required">*</span></label>
+                            <input type="number" name="withholding_tax_rate" id="create_withholding_tax_rate" 
+                                   class="form-control" step="0.01" min="0" max="100" value="5.00" 
+                                   required onchange="calculateCommission('create')">
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <div id="create_commission_calculation" class="alert alert-success" style="display:none;">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" class="form-control" rows="3" 
+                                      placeholder="Additional notes about this commission..."></textarea>
+                        </div>
+                        
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-2"></i>Save Commission
+                        <i class="fas fa-save me-1"></i>Create & Submit for Approval
                     </button>
                 </div>
             </form>
@@ -840,18 +1054,102 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- View Commission Modal -->
-<div class="modal fade" id="viewModal" tabindex="-1">
+<!-- EDIT COMMISSION MODAL -->
+<div class="modal fade" id="editCommissionModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-eye me-2"></i>Commission Details
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Edit Commission</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="commissionDetailsContent">
-                <!-- Content loaded via JavaScript -->
+            <form method="POST" action="">
+                <input type="hidden" name="action" value="edit_commission">
+                <input type="hidden" name="commission_id" id="edit_commission_id">
+                <input type="hidden" name="reservation_id" id="edit_reservation_id">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Commission Date <span class="required">*</span></label>
+                            <input type="date" name="commission_date" id="edit_commission_date" 
+                                   class="form-control" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Commission Type <span class="required">*</span></label>
+                            <select name="commission_type" id="edit_commission_type" class="form-select" required>
+                                <option value="sales">Sales Commission</option>
+                                <option value="referral">Referral Commission</option>
+                                <option value="milestone">Milestone Bonus</option>
+                                <option value="bonus">Performance Bonus</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <div id="edit_reservation_details" class="alert alert-info">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Recipient (Sales Person) <span class="required">*</span></label>
+                            <select name="user_id" id="edit_user_id" class="form-select" required>
+                                <?php foreach ($users as $u): ?>
+                                    <option value="<?= $u['user_id'] ?>">
+                                        <?= htmlspecialchars($u['full_name']) ?> - <?= htmlspecialchars($u['email']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Commission Percentage (%) <span class="required">*</span></label>
+                            <input type="number" name="commission_percentage" id="edit_commission_percentage" 
+                                   class="form-control" step="0.01" min="0" max="100" 
+                                   required onchange="calculateCommission('edit')">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Withholding Tax Rate (%) <span class="required">*</span></label>
+                            <input type="number" name="withholding_tax_rate" id="edit_withholding_tax_rate" 
+                                   class="form-control" step="0.01" min="0" max="100" 
+                                   required onchange="calculateCommission('edit')">
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <div id="edit_commission_calculation" class="alert alert-success">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" id="edit_notes" class="form-control" rows="3"></textarea>
+                        </div>
+                        
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-white">
+                        <i class="fas fa-save me-1"></i>Update Commission
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- VIEW COMMISSION MODAL -->
+<div class="modal fade" id="viewCommissionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice"></i> Commission Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="viewCommissionContent">
+                <!-- Populated by JS -->
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -860,223 +1158,342 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<!-- DELETE CONFIRMATION MODAL -->
+<div class="modal fade" id="deleteCommissionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-trash"></i> Delete Commission</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                <input type="hidden" name="action" value="delete_commission">
+                <input type="hidden" name="commission_id" id="delete_commission_id">
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Are you sure you want to delete commission <strong id="delete_commission_number"></strong>?
+                    </div>
+                    <p>This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete Commission
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- RECORD PAYMENT MODAL -->
+<div class="modal fade" id="recordPaymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-money-bill-wave"></i> Record Commission Payment</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                <input type="hidden" name="action" value="record_payment">
+                <input type="hidden" name="commission_id" id="payment_commission_id">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <strong>Commission:</strong> <span id="payment_commission_number"></span><br>
+                                <strong>Recipient:</strong> <span id="payment_recipient_name"></span><br>
+                                <strong>Entitled Amount:</strong> TZS <span id="payment_entitled_amount"></span><br>
+                                <strong>Already Paid:</strong> TZS <span id="payment_total_paid"></span><br>
+                                <strong>Outstanding Balance:</strong> <strong class="text-danger">TZS <span id="payment_balance"></span></strong>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Payment Date <span class="required">*</span></label>
+                            <input type="date" name="payment_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Payment Amount (TZS) <span class="required">*</span></label>
+                            <input type="number" name="payment_amount" id="payment_amount" class="form-control" 
+                                   step="0.01" min="0.01" required>
+                            <small class="text-muted">Maximum: <span id="payment_max_amount"></span></small>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Payment Method <span class="required">*</span></label>
+                            <select name="payment_method" class="form-select" required>
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="cash">Cash</option>
+                                <option value="cheque">Cheque</option>
+                                <option value="mobile_money">Mobile Money</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Reference Number</label>
+                            <input type="text" name="reference_number" class="form-control" 
+                                   placeholder="Transaction reference / cheque number">
+                        </div>
+                        
+                        <div class="col-md-12">
+                            <label class="form-label">Payment Notes</label>
+                            <textarea name="payment_notes" class="form-control" rows="2" 
+                                      placeholder="Additional notes about this payment..."></textarea>
+                        </div>
+                        
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-1"></i>Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
-let commissionModal, viewModal;
-
+// Initialize DataTable
 $(document).ready(function() {
-    commissionModal = new bootstrap.Modal(document.getElementById('commissionModal'));
-    viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
-    
-    // Initialize DataTable
     $('#commissionsTable').DataTable({
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
         order: [[0, 'desc']],
-        pageLength: 25
-    });
-    
-    // Handle recipient type option clicks
-    $('.recipient-type-option').on('click', function() {
-        $('.recipient-type-option').removeClass('active');
-        $(this).addClass('active');
-        $(this).find('input[type="radio"]').prop('checked', true).trigger('change');
+        columnDefs: [
+            { targets: [5, 7, 8, 9, 10], className: 'text-end' },
+            { targets: 6, className: 'text-center' },
+            { targets: 12, orderable: false, className: 'text-center' }
+        ]
     });
 });
 
-function showCommissionModal() {
-    document.getElementById('commissionForm').reset();
-    document.getElementById('commission_id').value = '';
-    document.getElementById('reservationInfoDiv').style.display = 'none';
-    document.getElementById('commission_amount').value = '';
-    document.getElementById('modalTitle').textContent = 'Calculate Commission';
-    $('.recipient-type-option').removeClass('active');
-    $('.recipient-type-option').first().addClass('active');
-    toggleRecipientFields();
-    commissionModal.show();
+// Load reservation details when selected
+function loadReservationDetails(reservationId, mode) {
+    const select = document.getElementById(mode + '_reservation_id');
+    const option = select.options[select.selectedIndex];
+    const detailsDiv = document.getElementById(mode + '_reservation_details');
+    
+    if (!reservationId) {
+        detailsDiv.style.display = 'none';
+        return;
+    }
+    
+    const amount = parseFloat(option.dataset.amount);
+    const customer = option.dataset.customer;
+    const plot = option.dataset.plot;
+    const project = option.dataset.project;
+    
+    detailsDiv.innerHTML = `
+        <strong>Reservation Details:</strong><br>
+        Customer: ${customer}<br>
+        Plot: ${plot} - ${project}<br>
+        Total Amount: <strong>TZS ${amount.toLocaleString()}</strong>
+    `;
+    detailsDiv.style.display = 'block';
+    
+    // Store amount for calculation
+    window[mode + '_base_amount'] = amount;
+    
+    // Trigger calculation
+    calculateCommission(mode);
 }
 
-function toggleRecipientFields() {
-    const recipientType = document.querySelector('input[name="recipient_type"]:checked').value;
-    const userSelectDiv = document.getElementById('userSelectDiv');
-    const manualRecipientDiv = document.getElementById('manualRecipientDiv');
-    const userSelect = document.getElementById('user_id');
-    const recipientName = document.getElementById('recipient_name');
+// Calculate commission amounts
+function calculateCommission(mode) {
+    const baseAmount = window[mode + '_base_amount'] || 0;
+    const percentage = parseFloat(document.getElementById(mode + '_commission_percentage').value) || 0;
+    const taxRate = parseFloat(document.getElementById(mode + '_withholding_tax_rate').value) || 0;
+    
+    const commissionAmount = (baseAmount * percentage) / 100;
+    const taxAmount = (commissionAmount * taxRate) / 100;
+    const entitledAmount = commissionAmount - taxAmount;
+    
+    const calcDiv = document.getElementById(mode + '_commission_calculation');
+    
+    if (baseAmount > 0) {
+        calcDiv.innerHTML = `
+            <strong>Commission Calculation:</strong><br>
+            Base Amount: TZS ${baseAmount.toLocaleString()}<br>
+            Commission (${percentage}%): <strong>TZS ${commissionAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong><br>
+            Withholding Tax (${taxRate}%): <span class="text-danger">TZS ${taxAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span><br>
+            <hr>
+            Net Entitled Amount: <strong class="text-success">TZS ${entitledAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+        `;
+        calcDiv.style.display = 'block';
+    } else {
+        calcDiv.style.display = 'none';
+    }
+}
+
+// Toggle recipient fields based on recipient type
+function toggleRecipientFields(mode) {
+    const recipientType = document.getElementById(mode + '_recipient_type').value;
+    const userIdSelect = document.getElementById(mode + '_user_id');
+    const recipientNameDiv = document.getElementById(mode + '_recipient_name_div');
+    const recipientPhoneDiv = document.getElementById(mode + '_recipient_phone_div');
+    const recipientNameInput = document.getElementById(mode + '_recipient_name');
+    const recipientPhoneInput = document.getElementById(mode + '_recipient_phone');
     
     if (recipientType === 'user') {
-        userSelectDiv.style.display = 'block';
-        manualRecipientDiv.style.display = 'none';
-        userSelect.required = true;
-        recipientName.required = false;
-    } else {
-        userSelectDiv.style.display = 'none';
-        manualRecipientDiv.style.display = 'block';
-        userSelect.required = false;
-        recipientName.required = true;
-    }
-}
-
-function updateReservationInfo() {
-    const reservationSelect = document.getElementById('reservation_id');
-    const selectedOption = reservationSelect.options[reservationSelect.selectedIndex];
-    
-    if (selectedOption.value) {
-        document.getElementById('info_customer').textContent = selectedOption.dataset.customer;
-        document.getElementById('info_amount').textContent = 'TZS ' + parseFloat(selectedOption.dataset.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
-        document.getElementById('info_property').textContent = selectedOption.dataset.project + ' - Plot ' + selectedOption.dataset.plot;
-        document.getElementById('reservationInfoDiv').style.display = 'block';
+        // System user - show user dropdown, hide manual fields
+        userIdSelect.style.display = 'block';
+        userIdSelect.required = true;
+        recipientNameDiv.style.display = 'none';
+        recipientPhoneDiv.style.display = 'none';
+        recipientNameInput.required = false;
         
-        // Trigger calculation if rate is filled
-        calculateAmount();
-    } else {
-        document.getElementById('reservationInfoDiv').style.display = 'none';
-    }
-}
-
-function calculateAmount() {
-    const reservationSelect = document.getElementById('reservation_id');
-    const selectedOption = reservationSelect.options[reservationSelect.selectedIndex];
-    const rate = parseFloat(document.getElementById('commission_rate').value) || 0;
-    
-    if (selectedOption.value && rate > 0) {
-        const reservationAmount = parseFloat(selectedOption.dataset.amount) || 0;
-        const commissionAmount = (reservationAmount * rate) / 100;
-        document.getElementById('commission_amount').value = commissionAmount.toFixed(2);
-    }
-}
-
-function editCommission(commissionId) {
-    $.ajax({
-        url: '',
-        type: 'POST',
-        data: {
-            ajax: 1,
-            action: 'get_commission',
-            commission_id: commissionId
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                const commission = response.commission;
-                document.getElementById('commission_id').value = commission.commission_id;
-                document.getElementById('commission_rate').value = commission.commission_percentage;
-                document.getElementById('commission_amount').value = commission.commission_amount;
-                document.getElementById('remarks').value = commission.remarks || '';
-                
-                document.getElementById('modalTitle').textContent = 'Edit Commission';
-                document.querySelector('#commissionForm input[name="action"]').value = 'update_commission';
-                commissionModal.show();
-            } else {
-                alert('Error: ' + response.message);
-            }
-        }
-    });
-}
-
-function viewCommission(commissionId) {
-    $.ajax({
-        url: '',
-        type: 'POST',
-        data: {
-            ajax: 1,
-            action: 'get_commission',
-            commission_id: commissionId
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                const c = response.commission;
-                let html = `
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-muted mb-2">Reservation Information</h6>
-                            <p class="mb-1"><strong>Customer:</strong> ${c.customer_first_name} ${c.customer_last_name}</p>
-                            <p class="mb-1"><strong>Property:</strong> ${c.project_name} - Plot ${c.plot_number}</p>
-                            <p class="mb-1"><strong>Amount:</strong> TZS ${parseFloat(c.reservation_amount).toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-muted mb-2">Recipient Information</h6>
-                            <p class="mb-1"><strong>Name:</strong> ${c.recipient_name}</p>
-                            <p class="mb-1"><strong>Type:</strong> ${c.recipient_type}</p>
-                            ${c.recipient_phone ? `<p class="mb-1"><strong>Phone:</strong> ${c.recipient_phone}</p>` : ''}
-                        </div>
-                        <div class="col-12"><hr></div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-muted mb-2">Commission Details</h6>
-                            <p class="mb-1"><strong>Type:</strong> ${c.commission_type}</p>
-                            <p class="mb-1"><strong>Rate:</strong> ${c.commission_percentage}%</p>
-                            <p class="mb-1"><strong>Amount:</strong> <span class="commission-amount">TZS ${parseFloat(c.commission_amount).toLocaleString('en-US', {minimumFractionDigits: 2})}</span></p>
-                            <p class="mb-1"><strong>Status:</strong> <span class="badge bg-${c.payment_status === 'pending' ? 'warning' : c.payment_status === 'paid' ? 'success' : 'danger'}">${c.payment_status.toUpperCase()}</span></p>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold text-muted mb-2">Additional Information</h6>
-                            <p class="mb-1"><strong>Created:</strong> ${new Date(c.created_at).toLocaleDateString()}</p>
-                            ${c.payment_date ? `<p class="mb-1"><strong>Paid:</strong> ${new Date(c.payment_date).toLocaleDateString()}</p>` : ''}
-                        </div>
-                        ${c.remarks ? `<div class="col-12"><h6 class="fw-bold text-muted mb-2">Remarks</h6><p>${c.remarks}</p></div>` : ''}
-                    </div>
-                `;
-                document.getElementById('commissionDetailsContent').innerHTML = html;
-                viewModal.show();
-            } else {
-                alert('Error: ' + response.message);
-            }
-        }
-    });
-}
-
-function deleteCommission(commissionId) {
-    if (confirm('Are you sure you want to delete this commission?')) {
-        $.ajax({
-            url: '',
-            type: 'POST',
-            data: {
-                ajax: 1,
-                action: 'delete_commission',
-                commission_id: commissionId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    alert(response.message);
-                    location.reload();
-                } else {
-                    alert('Error: ' + response.message);
-                }
+        // Auto-fill name and phone from selected user
+        userIdSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                recipientNameInput.value = selectedOption.dataset.name || '';
+                recipientPhoneInput.value = selectedOption.dataset.phone || '';
             }
         });
+        
+    } else {
+        // External or consultant - hide user dropdown, show manual fields
+        userIdSelect.style.display = 'none';
+        userIdSelect.required = false;
+        userIdSelect.value = '';
+        recipientNameDiv.style.display = 'block';
+        recipientPhoneDiv.style.display = 'block';
+        recipientNameInput.required = true;
     }
 }
 
-function filterByStatus(status) {
-    window.location.href = '?status=' + status;
+// View commission details
+function viewCommission(data) {
+    const content = `
+        <div class="row g-3">
+            <div class="col-md-6">
+                <h6 class="border-bottom pb-2">Commission Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Commission Number:</strong></td><td>${data.commission_number}</td></tr>
+                    <tr><td><strong>Date:</strong></td><td>${new Date(data.commission_date).toLocaleDateString()}</td></tr>
+                    <tr><td><strong>Type:</strong></td><td>${data.commission_type.charAt(0).toUpperCase() + data.commission_type.slice(1)}</td></tr>
+                    <tr><td><strong>Status:</strong></td><td><span class="status-badge ${data.payment_status}">${data.payment_status.toUpperCase()}</span></td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="border-bottom pb-2">Recipient Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Type:</strong></td><td><span class="badge bg-info">${data.recipient_type.charAt(0).toUpperCase() + data.recipient_type.slice(1)}</span></td></tr>
+                    <tr><td><strong>Name:</strong></td><td>${data.recipient_name_display}</td></tr>
+                    ${data.recipient_email ? `<tr><td><strong>Email:</strong></td><td>${data.recipient_email}</td></tr>` : ''}
+                    ${data.recipient_phone || data.user_phone ? `<tr><td><strong>Phone:</strong></td><td>${data.recipient_phone || data.user_phone || '-'}</td></tr>` : ''}
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="border-bottom pb-2">Reservation Details</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Reservation:</strong></td><td>${data.reservation_number}</td></tr>
+                    <tr><td><strong>Customer:</strong></td><td>${data.customer_name}</td></tr>
+                    <tr><td><strong>Plot:</strong></td><td>${data.plot_number}</td></tr>
+                    <tr><td><strong>Project:</strong></td><td>${data.project_name}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="border-bottom pb-2">Financial Details</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Base Amount:</strong></td><td>TZS ${parseFloat(data.base_amount).toLocaleString()}</td></tr>
+                    <tr><td><strong>Commission Rate:</strong></td><td>${data.commission_percentage}%</td></tr>
+                    <tr><td><strong>Commission Amount:</strong></td><td>TZS ${parseFloat(data.commission_amount).toLocaleString()}</td></tr>
+                    <tr><td><strong>Withholding Tax (${data.withholding_tax_rate}%):</strong></td><td class="text-danger">TZS ${parseFloat(data.withholding_tax_amount).toLocaleString()}</td></tr>
+                    <tr><td><strong>Net Entitled:</strong></td><td class="text-success"><strong>TZS ${parseFloat(data.entitled_amount).toLocaleString()}</strong></td></tr>
+                    <tr><td><strong>Total Paid:</strong></td><td>TZS ${parseFloat(data.total_paid).toLocaleString()}</td></tr>
+                    <tr><td><strong>Balance:</strong></td><td class="text-danger"><strong>TZS ${parseFloat(data.balance).toLocaleString()}</strong></td></tr>
+                </table>
+            </div>
+            ${data.notes ? `
+            <div class="col-md-12">
+                <h6 class="border-bottom pb-2">Notes</h6>
+                <p>${data.notes}</p>
+            </div>
+            ` : ''}
+            <div class="col-md-12">
+                <h6 class="border-bottom pb-2">Audit Trail</h6>
+                <table class="table table-sm">
+                    ${data.submitted_by_name ? `<tr><td><strong>Submitted By:</strong></td><td>${data.submitted_by_name} on ${new Date(data.submitted_at).toLocaleString()}</td></tr>` : ''}
+                    ${data.approved_by_name ? `<tr><td><strong>Approved By:</strong></td><td>${data.approved_by_name} on ${new Date(data.approved_at).toLocaleString()}</td></tr>` : ''}
+                    ${data.paid_by_name ? `<tr><td><strong>Paid By:</strong></td><td>${data.paid_by_name} on ${new Date(data.paid_at).toLocaleString()}</td></tr>` : ''}
+                </table>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('viewCommissionContent').innerHTML = content;
+    new bootstrap.Modal(document.getElementById('viewCommissionModal')).show();
 }
 
-// Save commission
-document.getElementById('commissionForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+// Edit commission
+function editCommission(data) {
+    document.getElementById('edit_commission_id').value = data.commission_id;
+    document.getElementById('edit_reservation_id').value = data.reservation_id;
+    document.getElementById('edit_commission_date').value = data.commission_date;
+    document.getElementById('edit_commission_type').value = data.commission_type;
+    document.getElementById('edit_user_id').value = data.user_id;
+    document.getElementById('edit_commission_percentage').value = data.commission_percentage;
+    document.getElementById('edit_withholding_tax_rate').value = data.withholding_tax_rate;
+    document.getElementById('edit_notes').value = data.notes || '';
     
-    const formData = new FormData(this);
+    // Set reservation details
+    const detailsDiv = document.getElementById('edit_reservation_details');
+    detailsDiv.innerHTML = `
+        <strong>Reservation Details:</strong><br>
+        Reservation: ${data.reservation_number}<br>
+        Customer: ${data.customer_name}<br>
+        Plot: ${data.plot_number} - ${data.project_name}<br>
+        Total Amount: <strong>TZS ${parseFloat(data.base_amount).toLocaleString()}</strong>
+    `;
     
-    $.ajax({
-        url: '',
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                alert(response.message);
-                location.reload();
-            } else {
-                alert('Error: ' + response.message);
-            }
-        }
-    });
-});
+    // Store base amount and calculate
+    window.edit_base_amount = parseFloat(data.base_amount);
+    calculateCommission('edit');
+    
+    new bootstrap.Modal(document.getElementById('editCommissionModal')).show();
+}
+
+// Delete commission
+function deleteCommission(commissionId, commissionNumber) {
+    document.getElementById('delete_commission_id').value = commissionId;
+    document.getElementById('delete_commission_number').textContent = commissionNumber;
+    new bootstrap.Modal(document.getElementById('deleteCommissionModal')).show();
+}
+
+// Record payment
+function recordPayment(data) {
+    document.getElementById('payment_commission_id').value = data.commission_id;
+    document.getElementById('payment_commission_number').textContent = data.commission_number;
+    document.getElementById('payment_recipient_name').textContent = data.recipient_name_display;
+    document.getElementById('payment_entitled_amount').textContent = parseFloat(data.entitled_amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('payment_total_paid').textContent = parseFloat(data.total_paid || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('payment_balance').textContent = parseFloat(data.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('payment_max_amount').textContent = 'TZS ' + parseFloat(data.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    
+    // Set max amount for payment
+    document.getElementById('payment_amount').max = data.balance;
+    document.getElementById('payment_amount').value = data.balance; // Default to full balance
+    
+    new bootstrap.Modal(document.getElementById('recordPaymentModal')).show();
+}
+
+// Auto-dismiss alerts
+setTimeout(function() {
+    $('.alert-success, .alert-danger').not('.info-box').fadeOut();
+}, 5000);
 </script>
 
 <?php require_once '../../includes/footer.php'; ?>

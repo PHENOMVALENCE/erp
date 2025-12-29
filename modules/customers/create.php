@@ -136,45 +136,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Insert customer
             $sql = "INSERT INTO customers (
-                company_id, first_name, middle_name, last_name,
-                email, phone1, phone2, national_id, passport_number,
-                region, district, ward, village, street_address,
+                company_id, customer_type, first_name, middle_name, last_name,
+                email, phone, alternative_phone, national_id, passport_number,
+                tin_number, nationality, occupation,
+                region, district, ward, village, address, postal_address, street_address,
                 gender, profile_picture,
-                guardian1_name, guardian1_relationship,
-                guardian2_name, guardian2_relationship,
-                is_active, created_by
+                guardian1_name, guardian1_relationship, guardian1_phone,
+                guardian2_name, guardian2_relationship, guardian2_phone,
+                next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
+                notes, is_active, created_by
             ) VALUES (
-                ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
                 ?, ?,
-                ?, ?,
-                ?, ?,
-                1, ?
+                ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?,
+                ?, 1, ?
             )";
 
             $stmt = $conn->prepare($sql);
             $stmt->execute([
                 $company_id,
+                $_POST['customer_type'] ?? 'individual',
                 $_POST['first_name'],
                 $_POST['middle_name'] ?? null,
                 $_POST['last_name'],
                 $_POST['email'] ?? null,
-                $_POST['phone'] ?? null,
+                $_POST['phone'],
                 $_POST['alternative_phone'] ?? null,
                 $national_id,
                 $passport_number,
+                $_POST['tin_number'] ?? null,
+                $_POST['nationality'] ?? 'Tanzanian',
+                $_POST['occupation'] ?? null,
                 $_POST['region'] ?? null,
                 $_POST['district'] ?? null,
                 $_POST['ward'] ?? null,
                 $_POST['village'] ?? null,
+                $_POST['address'] ?? null,
+                $_POST['postal_address'] ?? null,
                 $_POST['street_address'] ?? null,
                 $_POST['gender'] ?? null,
                 $profile_picture_path,
                 $_POST['guardian1_name'] ?? null,
                 $_POST['guardian1_relationship'] ?? null,
+                $_POST['guardian1_phone'] ?? null,
                 $_POST['guardian2_name'] ?? null,
                 $_POST['guardian2_relationship'] ?? null,
+                $_POST['guardian2_phone'] ?? null,
+                $_POST['next_of_kin_name'] ?? null,
+                $_POST['next_of_kin_phone'] ?? null,
+                $_POST['next_of_kin_relationship'] ?? null,
+                $_POST['notes'] ?? null,
                 $_SESSION['user_id']
             ]);
 
@@ -522,24 +538,24 @@ require_once '../../includes/header.php';
 
                     <div class="col-md-3">
                         <label class="form-label">Ward</label>
-                        <select name="ward" id="ward" class="form-select" onchange="loadVillages()">
+                        <select name="ward" id="ward" class="form-select" onchange="loadStreets()">
                             <option value="">Select Ward</option>
                         </select>
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Village</label>
+                        <label class="form-label">Street/Village</label>
                         <select name="village" id="village" class="form-select">
-                            <option value="">Select Village</option>
+                            <option value="">Select Street</option>
                         </select>
                     </div>
 
                     <div class="col-md-12">
-                        <label class="form-label">Street Address</label>
+                        <label class="form-label">Physical Address</label>
                         <textarea name="street_address" 
                                   class="form-control" 
                                   rows="2"
-                                  placeholder="Enter street address"><?php echo htmlspecialchars($_POST['street_address'] ?? ''); ?></textarea>
+                                  placeholder="Enter detailed physical address (House number, plot number, etc.)"><?php echo htmlspecialchars($_POST['street_address'] ?? ''); ?></textarea>
                     </div>
 
                     <div class="col-md-6">
@@ -649,7 +665,16 @@ require_once '../../includes/header.php';
                                value="<?php echo htmlspecialchars($_POST['guardian1_name'] ?? ''); ?>">
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                        <label class="form-label">Guardian Phone</label>
+                        <input type="text" 
+                               name="guardian1_phone" 
+                               class="form-control" 
+                               placeholder="Enter phone number"
+                               value="<?php echo htmlspecialchars($_POST['guardian1_phone'] ?? ''); ?>">
+                    </div>
+
+                    <div class="col-md-4">
                         <label class="form-label">Relationship</label>
                         <select name="guardian1_relationship" class="form-select">
                             <option value="">Select Relationship</option>
@@ -676,7 +701,16 @@ require_once '../../includes/header.php';
                                value="<?php echo htmlspecialchars($_POST['guardian2_name'] ?? ''); ?>">
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                        <label class="form-label">Guardian Phone</label>
+                        <input type="text" 
+                               name="guardian2_phone" 
+                               class="form-control" 
+                               placeholder="Enter phone number"
+                               value="<?php echo htmlspecialchars($_POST['guardian2_phone'] ?? ''); ?>">
+                    </div>
+
+                    <div class="col-md-4">
                         <label class="form-label">Relationship</label>
                         <select name="guardian2_relationship" class="form-select">
                             <option value="">Select Relationship</option>
@@ -757,98 +791,133 @@ require_once '../../includes/header.php';
     </div>
 </section>
 
-<script src="../../assets/js/tanzania-locations.js"></script>
 <script>
 // Initialize location dropdowns on page load
 document.addEventListener('DOMContentLoaded', function() {
-    populateRegions();
+    loadRegions();
 });
 
-// Populate regions dropdown
-function populateRegions() {
-    const regionSelect = document.getElementById('region');
-    const regions = getRegions();
-    
-    regions.forEach(region => {
-        const option = document.createElement('option');
-        option.value = region.name;
-        option.textContent = region.name;
-        option.setAttribute('data-region-id', region.id);
-        regionSelect.appendChild(option);
-    });
+// Load regions from CSV
+async function loadRegions() {
+    try {
+        const response = await fetch('get_locations.php?action=get_regions');
+        const result = await response.json();
+        
+        if (result.success) {
+            const regionSelect = document.getElementById('region');
+            regionSelect.innerHTML = '<option value="">Select Region</option>';
+            
+            result.data.forEach(region => {
+                const option = document.createElement('option');
+                option.value = region.name;
+                option.textContent = region.name;
+                option.setAttribute('data-region-code', region.code);
+                regionSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading regions:', error);
+    }
 }
 
 // Load districts based on selected region
-function loadDistricts() {
+async function loadDistricts() {
     const regionSelect = document.getElementById('region');
     const districtSelect = document.getElementById('district');
     const wardSelect = document.getElementById('ward');
     const villageSelect = document.getElementById('village');
     
-    const selectedOption = regionSelect.options[regionSelect.selectedIndex];
-    const regionId = selectedOption.getAttribute('data-region-id');
+    const selectedRegion = regionSelect.value;
     
+    // Reset dependent dropdowns
     districtSelect.innerHTML = '<option value="">Select District</option>';
     wardSelect.innerHTML = '<option value="">Select Ward</option>';
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
     
-    if (regionId) {
-        const districts = getDistrictsByRegion(regionId);
+    if (!selectedRegion) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_districts&region=${encodeURIComponent(selectedRegion)}`);
+        const result = await response.json();
         
-        districts.forEach(district => {
-            const option = document.createElement('option');
-            option.value = district.name;
-            option.textContent = district.name;
-            option.setAttribute('data-district-id', district.id);
-            districtSelect.appendChild(option);
-        });
+        if (result.success) {
+            result.data.forEach(district => {
+                const option = document.createElement('option');
+                option.value = district.name;
+                option.textContent = district.name;
+                option.setAttribute('data-district-code', district.code);
+                districtSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading districts:', error);
     }
 }
 
 // Load wards based on selected district
-function loadWards() {
+async function loadWards() {
+    const regionSelect = document.getElementById('region');
     const districtSelect = document.getElementById('district');
     const wardSelect = document.getElementById('ward');
     const villageSelect = document.getElementById('village');
     
-    const selectedOption = districtSelect.options[districtSelect.selectedIndex];
-    const districtId = selectedOption.getAttribute('data-district-id');
+    const selectedRegion = regionSelect.value;
+    const selectedDistrict = districtSelect.value;
     
+    // Reset dependent dropdowns
     wardSelect.innerHTML = '<option value="">Select Ward</option>';
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
     
-    if (districtId) {
-        const wards = getWardsByDistrict(districtId);
+    if (!selectedRegion || !selectedDistrict) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_wards&region=${encodeURIComponent(selectedRegion)}&district=${encodeURIComponent(selectedDistrict)}`);
+        const result = await response.json();
         
-        wards.forEach(ward => {
-            const option = document.createElement('option');
-            option.value = ward.name;
-            option.textContent = ward.name;
-            option.setAttribute('data-ward-id', ward.id);
-            wardSelect.appendChild(option);
-        });
+        if (result.success) {
+            result.data.forEach(ward => {
+                const option = document.createElement('option');
+                option.value = ward.name;
+                option.textContent = ward.name;
+                option.setAttribute('data-ward-code', ward.code);
+                wardSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading wards:', error);
     }
 }
 
-// Load villages based on selected ward
-function loadVillages() {
+// Load streets based on selected ward
+async function loadStreets() {
+    const regionSelect = document.getElementById('region');
+    const districtSelect = document.getElementById('district');
     const wardSelect = document.getElementById('ward');
     const villageSelect = document.getElementById('village');
     
-    const selectedOption = wardSelect.options[wardSelect.selectedIndex];
-    const wardId = selectedOption.getAttribute('data-ward-id');
+    const selectedRegion = regionSelect.value;
+    const selectedDistrict = districtSelect.value;
+    const selectedWard = wardSelect.value;
     
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
+    // Reset street dropdown
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
     
-    if (wardId) {
-        const villages = getVillagesByWard(wardId);
+    if (!selectedRegion || !selectedDistrict || !selectedWard) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_streets&region=${encodeURIComponent(selectedRegion)}&district=${encodeURIComponent(selectedDistrict)}&ward=${encodeURIComponent(selectedWard)}`);
+        const result = await response.json();
         
-        villages.forEach(village => {
-            const option = document.createElement('option');
-            option.value = village.name;
-            option.textContent = village.name;
-            villageSelect.appendChild(option);
-        });
+        if (result.success) {
+            result.data.forEach(street => {
+                const option = document.createElement('option');
+                option.value = street.name;
+                option.textContent = street.name;
+                villageSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading streets:', error);
     }
 }
 

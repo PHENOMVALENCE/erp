@@ -55,10 +55,10 @@ try {
 }
 
 // Build filter conditions
-$where_conditions = ["p.company_id = ? "];
+$where_conditions = ["p.company_id = ?"];
 $params = [$company_id];
 
-if (! empty($_GET['status'])) {
+if (!empty($_GET['status'])) {
     $where_conditions[] = "p.status = ?";
     $params[] = $_GET['status'];
 }
@@ -74,17 +74,17 @@ if (!empty($_GET['payment_type'])) {
 }
 
 if (!empty($_GET['date_from'])) {
-    $where_conditions[] = "p.payment_date >= ? ";
+    $where_conditions[] = "p.payment_date >= ?";
     $params[] = $_GET['date_from'];
 }
 
 if (!empty($_GET['date_to'])) {
-    $where_conditions[] = "p. payment_date <= ?";
+    $where_conditions[] = "p.payment_date <= ?";
     $params[] = $_GET['date_to'];
 }
 
 if (!empty($_GET['search'])) {
-    $where_conditions[] = "(c.full_name LIKE ? OR p.payment_number LIKE ?  OR p.receipt_number LIKE ?  OR p.transaction_reference LIKE ?)";
+    $where_conditions[] = "(c.full_name LIKE ? OR p.payment_number LIKE ? OR p.receipt_number LIKE ? OR p.transaction_reference LIKE ?)";
     $search = '%' . $_GET['search'] . '%';
     $params[] = $search;
     $params[] = $search;
@@ -110,7 +110,7 @@ try {
             u.full_name as created_by_name,
             approver.full_name as approved_by_name
         FROM payments p
-        INNER JOIN reservations r ON p. reservation_id = r.reservation_id
+        INNER JOIN reservations r ON p.reservation_id = r.reservation_id
         INNER JOIN customers c ON r.customer_id = c.customer_id
         INNER JOIN plots pl ON r.plot_id = pl.plot_id
         INNER JOIN projects pr ON pl.project_id = pr.project_id
@@ -132,7 +132,7 @@ require_once '../../includes/header.php';
 ?>
 
 <style>
-. stats-card {
+.stats-card {
     background: white;
     border-radius: 12px;
     padding: 1.5rem;
@@ -146,17 +146,17 @@ require_once '../../includes/header.php';
     box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
 
-.stats-card. primary { border-left-color: #007bff; }
+.stats-card.primary { border-left-color: #007bff; }
 .stats-card.success { border-left-color: #28a745; }
 .stats-card.warning { border-left-color: #ffc107; }
 .stats-card.danger { border-left-color: #dc3545; }
 .stats-card.info { border-left-color: #17a2b8; }
-. stats-card.purple { border-left-color: #6f42c1; }
+.stats-card.purple { border-left-color: #6f42c1; }
 .stats-card.orange { border-left-color: #fd7e14; }
 
 .stats-number {
     font-size: 1.75rem;
-    font-weight:  700;
+    font-weight: 700;
     color: #2c3e50;
 }
 
@@ -186,55 +186,55 @@ require_once '../../includes/header.php';
 .payment-badge {
     padding: 0.35rem 0.75rem;
     border-radius: 20px;
-    font-size:  0.8rem;
-    font-weight:  600;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .payment-badge.approved {
     background: #d4edda;
-    color:  #155724;
+    color: #155724;
 }
 
-. payment-badge.pending {
+.payment-badge.pending {
     background: #fff3cd;
     color: #856404;
 }
 
 .payment-badge.cancelled {
     background: #f8d7da;
-    color:  #721c24;
+    color: #721c24;
 }
 
 .method-badge {
     padding: 0.25rem 0.6rem;
-    border-radius:  15px;
-    font-size:  0.75rem;
+    border-radius: 15px;
+    font-size: 0.75rem;
     font-weight: 600;
     background: #e9ecef;
-    color:  #495057;
+    color: #495057;
 }
 
 .method-badge.cash {
     background: #d4edda;
-    color:  #155724;
+    color: #155724;
 }
 
-. method-badge.bank_transfer {
+.method-badge.bank_transfer {
     background: #d1ecf1;
-    color:  #0c5460;
+    color: #0c5460;
 }
 
 .method-badge.mobile_money {
     background: #fff3cd;
-    color:  #856404;
+    color: #856404;
 }
 
-. payment-number {
+.payment-number {
     font-family: 'Courier New', monospace;
     background: #f8f9fa;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
-    font-size:  0.85rem;
+    font-size: 0.85rem;
 }
 
 .amount-highlight {
@@ -256,7 +256,7 @@ require_once '../../includes/header.php';
 .customer-avatar {
     width: 36px;
     height: 36px;
-    border-radius:  50%;
+    border-radius: 50%;
     background: linear-gradient(135deg, #667eea, #764ba2);
     color: white;
     display: flex;
@@ -264,7 +264,7 @@ require_once '../../includes/header.php';
     justify-content: center;
     font-weight: 700;
     font-size: 0.9rem;
-    margin-right:  10px;
+    margin-right: 10px;
 }
 
 .quick-stats {
@@ -461,7 +461,7 @@ require_once '../../includes/header.php';
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (! empty($payments)): ?>
+                        <?php if (!empty($payments)): ?>
                         <?php foreach ($payments as $payment): ?>
                         <tr>
                             <td>
@@ -502,7 +502,7 @@ require_once '../../includes/header.php';
                                 <span class="amount-highlight">
                                     TSH <?php echo number_format((float)$payment['amount'], 0); ?>
                                 </span>
-                                <?php if ($payment['tax_amount'] > 0): ?>
+                                <?php if (!empty($payment['tax_amount']) && $payment['tax_amount'] > 0): ?>
                                 <div class="small text-muted">
                                     Tax: TSH <?php echo number_format((float)$payment['tax_amount'], 0); ?>
                                 </div>
@@ -549,7 +549,8 @@ require_once '../../includes/header.php';
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <a href="view.php? id=<?php echo $payment['payment_id']; ?>" 
+                                    <!-- FIXED: Removed space between ? and id -->
+                                    <a href="view.php?id=<?php echo $payment['payment_id']; ?>" 
                                        class="btn btn-outline-primary action-btn"
                                        title="View Details">
                                         <i class="fas fa-eye"></i>
@@ -573,7 +574,7 @@ require_once '../../includes/header.php';
                         <?php endforeach; ?>
                         <?php endif; ?>
                     </tbody>
-                    <?php if (! empty($payments)): ?>
+                    <?php if (!empty($payments)): ?>
                     <tfoot class="table-light">
                         <tr>
                             <th colspan="4" class="text-end">TOTALS:</th>
@@ -604,7 +605,7 @@ require_once '../../includes/header.php';
 </section>
 
 <!-- DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min. css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>

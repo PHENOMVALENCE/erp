@@ -13,7 +13,7 @@ $db->setCompanyId($_SESSION['company_id']);
 $conn = $db->getConnection();
 $company_id = $_SESSION['company_id'];
 
-// 🔥 ENHANCED DEPARTMENTS FETCHING WITH FALLBACK
+// Fetch departments
 $departments = [];
 try {
     $dept_query = "SELECT department_id, department_name FROM departments WHERE company_id = ? AND is_active = 1 ORDER BY department_name ASC";
@@ -28,10 +28,8 @@ try {
         $stmt->execute();
         $departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    
 } catch (PDOException $e) {
     error_log("Error fetching departments: " . $e->getMessage());
-    // Fallback departments
     $departments = [
         ['department_id' => 1, 'department_name' => 'Human Resources'],
         ['department_id' => 2, 'department_name' => 'Finance'],
@@ -43,7 +41,7 @@ try {
     ];
 }
 
-// 🔥 ENHANCED POSITIONS FETCHING WITH DEPARTMENT MAPPING
+// Fetch positions
 $positions = [];
 $positions_by_department = [];
 try {
@@ -66,10 +64,8 @@ try {
         }
         $positions_by_department[$dept_id][] = $pos;
     }
-    
 } catch (PDOException $e) {
     error_log("Error fetching positions: " . $e->getMessage());
-    // Fallback positions
     $positions = [
         ['position_id' => 1, 'position_title' => 'HR Manager', 'department_id' => 1],
         ['position_id' => 2, 'position_title' => 'Accountant', 'department_id' => 2],
@@ -99,15 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Check if email already exists
     if (!empty($_POST['email'])) {
         try {
-            $check_query = "SELECT user_id FROM users WHERE email = ? AND company_id = ? AND user_id != ?";
+            $check_query = "SELECT user_id FROM users WHERE email = ? AND company_id = ?";
             $stmt = $conn->prepare($check_query);
-            $stmt->execute([$_POST['email'], $company_id, 0]); // 0 as placeholder for new user
+            $stmt->execute([$_POST['email'], $company_id]);
             if ($stmt->fetch()) {
                 $errors[] = "Email address already exists";
             }
         } catch (PDOException $e) {
             error_log("Email check error: " . $e->getMessage());
-            $errors[] = "Error validating email";
         }
     }
     
@@ -122,7 +117,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } catch (PDOException $e) {
             error_log("Employee number check error: " . $e->getMessage());
-            $errors[] = "Error validating employee number";
         }
     }
     
@@ -131,9 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->beginTransaction();
             
             // Generate secure password
-            $default_password = bin2hex(random_bytes(8)); // Secure random password
-            
-            // Hash password (secure)
+            $default_password = bin2hex(random_bytes(8));
             $hashed_password = password_hash($default_password, PASSWORD_DEFAULT);
             
             // Generate username from email
@@ -197,9 +189,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     hire_date, confirmation_date, employment_type,
                     contract_end_date, basic_salary, allowances,
                     bank_name, account_number, bank_branch,
+                    nssf_number, tin_number,
                     emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
                     employment_status, created_by, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ";
             
             $stmt = $conn->prepare($employee_query);
@@ -218,6 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['bank_name'] ?? ''),
                 trim($_POST['account_number'] ?? ''),
                 trim($_POST['bank_branch'] ?? ''),
+                trim($_POST['nssf_number'] ?? ''),
+                trim($_POST['tin_number'] ?? ''),
                 trim($_POST['emergency_contact_name'] ?? ''),
                 trim($_POST['emergency_contact_phone'] ?? ''),
                 trim($_POST['emergency_contact_relationship'] ?? ''),
@@ -284,29 +279,6 @@ require_once '../../includes/header.php';
     color: #6c757d;
     margin-top: 0.25rem;
 }
-
-.dept-badge {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-right: 1rem;
-}
-
-.position-count {
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 0.25rem 0.75rem;
-    border-radius: 15px;
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.select2-container {
-    width: 100% !important;
-}
 </style>
 
 <!-- Content Header -->
@@ -319,12 +291,12 @@ require_once '../../includes/header.php';
                     Add New Employee
                 </h1>
                 <p class="text-muted small mb-0 mt-1">
-                    Complete employee information (<?php echo count($departments); ?> departments available)
+                    Complete employee information
                 </p>
             </div>
             <div class="col-sm-6">
                 <div class="float-sm-end">
-                    <a href="employees.php" class="btn btn-outline-secondary">
+                    <a href="index.php" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i> Back to Employees
                     </a>
                 </div>
@@ -336,21 +308,6 @@ require_once '../../includes/header.php';
 <!-- Main Content -->
 <section class="content">
     <div class="container-fluid">
-
-        <!-- Departments Info -->
-        <?php if (!empty($departments)): ?>
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="alert alert-info d-flex align-items-center">
-                    <i class="fas fa-info-circle me-3"></i>
-                    <div>
-                        <strong><?php echo count($departments); ?> Departments Available</strong>
-                        <span class="position-count ms-2">(<?php echo count($positions); ?> Positions)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <!-- Error Messages -->
         <?php if (!empty($errors)): ?>
@@ -365,7 +322,7 @@ require_once '../../includes/header.php';
         </div>
         <?php endif; ?>
 
-        <form method="POST" action="" enctype="multipart/form-data" id="employeeForm">
+        <form method="POST" action="" id="employeeForm">
             
             <!-- Personal Information -->
             <div class="form-section">
@@ -422,47 +379,42 @@ require_once '../../includes/header.php';
                         <input type="date" name="date_of_birth" class="form-control"
                                value="<?php echo htmlspecialchars($_POST['date_of_birth'] ?? ''); ?>">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label class="form-label">National ID</label>
                         <input type="text" name="national_id" class="form-control"
                                value="<?php echo htmlspecialchars($_POST['national_id'] ?? ''); ?>"
                                placeholder="e.g., 19991234-56789-01-2023">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Profile Picture</label>
-                        <input type="file" name="profile_picture" class="form-control" accept="image/*">
-                        <div class="form-help-text">Optional - JPG, PNG (max 2MB)</div>
-                    </div>
                 </div>
             </div>
 
-            <!-- Address Information -->
+            <!-- Address Information with CSV Location -->
             <div class="form-section" style="border-left-color: #28a745;">
                 <h5 style="color: #28a745;"><i class="fas fa-map-marker-alt me-2"></i>Address Information</h5>
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label">Region</label>
-                        <input type="text" name="region" class="form-control"
-                               value="<?php echo htmlspecialchars($_POST['region'] ?? ''); ?>"
-                               placeholder="e.g., Dar es Salaam">
+                        <select name="region" id="region" class="form-select" onchange="loadDistricts()">
+                            <option value="">Select Region</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">District</label>
-                        <input type="text" name="district" class="form-control"
-                               value="<?php echo htmlspecialchars($_POST['district'] ?? ''); ?>"
-                               placeholder="e.g., Ilala">
+                        <select name="district" id="district" class="form-select" onchange="loadWards()">
+                            <option value="">Select District</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Ward</label>
-                        <input type="text" name="ward" class="form-control"
-                               value="<?php echo htmlspecialchars($_POST['ward'] ?? ''); ?>"
-                               placeholder="e.g., Upanga">
+                        <select name="ward" id="ward" class="form-select" onchange="loadStreets()">
+                            <option value="">Select Ward</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Village/Street</label>
-                        <input type="text" name="village" class="form-control"
-                               value="<?php echo htmlspecialchars($_POST['village'] ?? ''); ?>"
-                               placeholder="e.g., Ohio Street">
+                        <label class="form-label">Street/Village</label>
+                        <select name="village" id="village" class="form-select">
+                            <option value="">Select Street</option>
+                        </select>
                     </div>
                     <div class="col-md-12">
                         <label class="form-label">Full Address</label>
@@ -486,37 +438,27 @@ require_once '../../includes/header.php';
                     <div class="col-md-4">
                         <label class="form-label">Department</label>
                         <select name="department_id" class="form-select" id="department_id">
-                            <option value="">📋 Select Department (<?php echo count($departments); ?>)</option>
-                            <?php if (empty($departments)): ?>
-                                <option disabled>No departments available</option>
-                            <?php else: ?>
-                                <?php foreach ($departments as $dept): ?>
-                                <option value="<?php echo $dept['department_id']; ?>"
-                                        <?php echo ($_POST['department_id'] ?? '') == $dept['department_id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($dept['department_name']); ?>
-                                </option>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <option value="">Select Department</option>
+                            <?php foreach ($departments as $dept): ?>
+                            <option value="<?php echo $dept['department_id']; ?>"
+                                    <?php echo ($_POST['department_id'] ?? '') == $dept['department_id'] ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($dept['department_name']); ?>
+                            </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Position</label>
                         <select name="position_id" class="form-select" id="position_id">
-                            <option value="">📋 Select Position</option>
-                            <?php if (!empty($positions)): ?>
-                                <?php foreach ($positions as $pos): ?>
-                                <option value="<?php echo $pos['position_id']; ?>" 
-                                        data-department="<?php echo $pos['department_id']; ?>"
-                                        <?php echo ($_POST['position_id'] ?? '') == $pos['position_id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($pos['position_title']); ?>
-                                    <?php if ($pos['department_name']): ?>
-                                        <span class="text-muted small"> - <?php echo htmlspecialchars($pos['department_name']); ?></span>
-                                    <?php endif; ?>
-                                </option>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <option value="">Select Position</option>
+                            <?php foreach ($positions as $pos): ?>
+                            <option value="<?php echo $pos['position_id']; ?>" 
+                                    data-department="<?php echo $pos['department_id']; ?>"
+                                    <?php echo ($_POST['position_id'] ?? '') == $pos['position_id'] ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($pos['position_title']); ?>
+                            </option>
+                            <?php endforeach; ?>
                         </select>
-                        <div class="form-help-text">Positions will be filtered by selected department</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Hire Date <span class="required-indicator">*</span></label>
@@ -567,9 +509,30 @@ require_once '../../includes/header.php';
                 </div>
             </div>
 
-            <!-- Bank Information -->
+            <!-- Tax & Social Security Information -->
             <div class="form-section" style="border-left-color: #6f42c1;">
-                <h5 style="color: #6f42c1;"><i class="fas fa-university me-2"></i>Bank Information</h5>
+                <h5 style="color: #6f42c1;"><i class="fas fa-id-card me-2"></i>Tax & Social Security Information</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">NSSF Number</label>
+                        <input type="text" name="nssf_number" class="form-control"
+                               value="<?php echo htmlspecialchars($_POST['nssf_number'] ?? ''); ?>"
+                               placeholder="Enter NSSF registration number">
+                        <div class="form-help-text">National Social Security Fund registration number</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">TIN Number</label>
+                        <input type="text" name="tin_number" class="form-control"
+                               value="<?php echo htmlspecialchars($_POST['tin_number'] ?? ''); ?>"
+                               placeholder="Enter TIN number">
+                        <div class="form-help-text">Tax Identification Number</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bank Information -->
+            <div class="form-section" style="border-left-color: #20c997;">
+                <h5 style="color: #20c997;"><i class="fas fa-university me-2"></i>Bank Information</h5>
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label">Bank Name</label>
@@ -609,8 +572,8 @@ require_once '../../includes/header.php';
                                placeholder="e.g., Jane Doe">
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Contact Phone <span class="required-indicator">*</span></label>
-                        <input type="tel" name="emergency_contact_phone" class="form-control" required
+                        <label class="form-label">Contact Phone</label>
+                        <input type="tel" name="emergency_contact_phone" class="form-control"
                                value="<?php echo htmlspecialchars($_POST['emergency_contact_phone'] ?? ''); ?>"
                                placeholder="+255 712 345 678">
                     </div>
@@ -632,14 +595,13 @@ require_once '../../includes/header.php';
             <div class="form-section" style="border-left-color: #6c757d; background: #f8f9fa;">
                 <div class="row align-items-center">
                     <div class="col-md-8">
-                        <div class="alert alert-info">
+                        <div class="alert alert-info mb-0">
                             <i class="fas fa-info-circle me-2"></i>
                             <strong>Important:</strong> Default password will be generated automatically and shown after successful submission.
-                            Employee must change password on first login.
                         </div>
                     </div>
                     <div class="col-md-4 text-end">
-                        <a href="employees.php" class="btn btn-outline-secondary btn-lg px-4 me-2">
+                        <a href="index.php" class="btn btn-outline-secondary btn-lg px-4 me-2">
                             <i class="fas fa-times me-2"></i> Cancel
                         </a>
                         <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
@@ -656,6 +618,9 @@ require_once '../../includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Load regions on page load
+    loadRegions();
+    
     // Show/hide contract end date based on employment type
     const employmentType = document.getElementById('employment_type');
     const contractEndGroup = document.getElementById('contract_end_group');
@@ -665,133 +630,174 @@ document.addEventListener('DOMContentLoaded', function() {
             contractEndGroup.style.display = 'block';
         } else {
             contractEndGroup.style.display = 'none';
-            document.querySelector('input[name="contract_end_date"]').value = '';
         }
     }
     
     employmentType.addEventListener('change', toggleContractEnd);
-    toggleContractEnd(); // Initialize
+    toggleContractEnd();
     
-    // 🔥 ENHANCED Department → Position Filtering
+    // Department → Position Filtering
     const departmentSelect = document.getElementById('department_id');
     const positionSelect = document.getElementById('position_id');
-    
-    // Store all positions with department info
     const allPositions = Array.from(positionSelect.options).filter(opt => opt.value !== '');
     
     departmentSelect.addEventListener('change', function() {
         const selectedDeptId = this.value;
-        
-        // Clear positions except default
-        positionSelect.innerHTML = '<option value="">📋 Select Position</option>';
+        positionSelect.innerHTML = '<option value="">Select Position</option>';
         
         if (!selectedDeptId) {
-            // Show all positions if no department selected
             allPositions.forEach(option => {
-                const newOption = option.cloneNode(true);
-                positionSelect.appendChild(newOption);
+                positionSelect.appendChild(option.cloneNode(true));
             });
             return;
         }
         
-        // Filter positions by selected department
-        let positionCount = 0;
         allPositions.forEach(option => {
             if (option.dataset.department == selectedDeptId) {
-                const newOption = option.cloneNode(true);
-                positionSelect.appendChild(newOption);
-                positionCount++;
-            }
-        });
-        
-        // Update position dropdown text
-        if (positionCount === 0) {
-            const noPositionsOption = document.createElement('option');
-            noPositionsOption.value = '';
-            noPositionsOption.disabled = true;
-            noPositionsOption.textContent = 'No positions available for this department';
-            positionSelect.appendChild(noPositionsOption);
-        }
-    });
-    
-    // Form validation
-    const form = document.getElementById('employeeForm');
-    const submitBtn = document.getElementById('submitBtn');
-    
-    form.addEventListener('submit', function(e) {
-        const requiredFields = [
-            'first_name', 'last_name', 'email', 'employee_number',
-            'hire_date', 'employment_type', 'basic_salary', 'emergency_contact_phone'
-        ];
-        
-        let isValid = true;
-        requiredFields.forEach(field => {
-            const input = document.querySelector(`[name="${field}"]`);
-            if (!input.value.trim()) {
-                input.classList.add('is-invalid');
-                isValid = false;
-            } else {
-                input.classList.remove('is-invalid');
-            }
-        });
-        
-        if (!isValid) {
-            e.preventDefault();
-            const firstInvalid = document.querySelector('.is-invalid');
-            if (firstInvalid) {
-                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                firstInvalid.focus();
-            }
-            alert('Please fill all required fields marked with *');
-            return false;
-        }
-        
-        // Disable submit button to prevent double submission
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving Employee...';
-    });
-    
-    // Auto-format phone numbers
-    const phoneInputs = document.querySelectorAll('input[type="tel"]');
-    phoneInputs.forEach(input => {
-        input.addEventListener('input', function() {
-            let value = this.value.replace(/\D/g, '');
-            if (value.startsWith('255')) {
-                value = value.substring(3);
-            }
-            if (value.length > 9) {
-                value = value.substring(0, 9);
-            }
-            if (value.length >= 3) {
-                this.value = '+255 ' + value.substring(0, 3) + ' ' + 
-                           value.substring(3, 6) + ' ' + value.substring(6);
-            } else {
-                this.value = '+255 ' + value;
+                positionSelect.appendChild(option.cloneNode(true));
             }
         });
     });
-    
-    // Salary calculation preview
-    const basicSalaryInput = document.querySelector('input[name="basic_salary"]');
-    const allowancesInput = document.querySelector('input[name="allowances"]');
-    const totalSalaryDisplay = document.createElement('div');
-    totalSalaryDisplay.className = 'form-help-text fw-bold text-success mt-2';
-    
-    function updateTotalSalary() {
-        const basic = parseFloat(basicSalaryInput.value) || 0;
-        const allowances = parseFloat(allowancesInput.value) || 0;
-        const total = basic + allowances;
-        totalSalaryDisplay.innerHTML = `💰 Total Monthly Salary: <strong>TSH ${total.toLocaleString()}</strong>`;
-    }
-    
-    if (basicSalaryInput && allowancesInput) {
-        basicSalaryInput.parentNode.appendChild(totalSalaryDisplay);
-        allowancesInput.parentNode.appendChild(totalSalaryDisplay.cloneNode(true));
-        
-        basicSalaryInput.addEventListener('input', updateTotalSalary);
-        allowancesInput.addEventListener('input', updateTotalSalary);
-    }
 });
+
+// Load regions from CSV
+async function loadRegions() {
+    try {
+        const response = await fetch('get_locations.php?action=get_regions');
+        const result = await response.json();
+        
+        if (result.success) {
+            const regionSelect = document.getElementById('region');
+            regionSelect.innerHTML = '<option value="">Select Region</option>';
+            
+            result.data.forEach(region => {
+                const option = document.createElement('option');
+                option.value = region.name;
+                option.textContent = region.name;
+                option.setAttribute('data-region-code', region.code);
+                regionSelect.appendChild(option);
+            });
+            
+            console.log('Loaded ' + result.data.length + ' regions');
+        } else {
+            console.error('Failed to load regions:', result.error);
+            alert('Failed to load regions: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error loading regions:', error);
+        alert('Error loading regions. Please check console for details.');
+    }
+}
+
+// Load districts based on selected region
+async function loadDistricts() {
+    const regionSelect = document.getElementById('region');
+    const districtSelect = document.getElementById('district');
+    const wardSelect = document.getElementById('ward');
+    const villageSelect = document.getElementById('village');
+    
+    const selectedRegion = regionSelect.value;
+    
+    districtSelect.innerHTML = '<option value="">Select District</option>';
+    wardSelect.innerHTML = '<option value="">Select Ward</option>';
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
+    
+    if (!selectedRegion) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_districts&region=${encodeURIComponent(selectedRegion)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            result.data.forEach(district => {
+                const option = document.createElement('option');
+                option.value = district.name;
+                option.textContent = district.name;
+                option.setAttribute('data-district-code', district.code);
+                districtSelect.appendChild(option);
+            });
+            
+            console.log('Loaded ' + result.data.length + ' districts for ' + selectedRegion);
+        } else {
+            console.error('Failed to load districts:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading districts:', error);
+    }
+}
+
+// Load wards based on selected district
+async function loadWards() {
+    const regionSelect = document.getElementById('region');
+    const districtSelect = document.getElementById('district');
+    const wardSelect = document.getElementById('ward');
+    const villageSelect = document.getElementById('village');
+    
+    const selectedRegion = regionSelect.value;
+    const selectedDistrict = districtSelect.value;
+    
+    wardSelect.innerHTML = '<option value="">Select Ward</option>';
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
+    
+    if (!selectedRegion || !selectedDistrict) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_wards&region=${encodeURIComponent(selectedRegion)}&district=${encodeURIComponent(selectedDistrict)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            result.data.forEach(ward => {
+                const option = document.createElement('option');
+                option.value = ward.name;
+                option.textContent = ward.name;
+                option.setAttribute('data-ward-code', ward.code);
+                wardSelect.appendChild(option);
+            });
+            
+            console.log('Loaded ' + result.data.length + ' wards for ' + selectedDistrict);
+        } else {
+            console.error('Failed to load wards:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading wards:', error);
+    }
+}
+
+// Load streets based on selected ward
+async function loadStreets() {
+    const regionSelect = document.getElementById('region');
+    const districtSelect = document.getElementById('district');
+    const wardSelect = document.getElementById('ward');
+    const villageSelect = document.getElementById('village');
+    
+    const selectedRegion = regionSelect.value;
+    const selectedDistrict = districtSelect.value;
+    const selectedWard = wardSelect.value;
+    
+    villageSelect.innerHTML = '<option value="">Select Street</option>';
+    
+    if (!selectedRegion || !selectedDistrict || !selectedWard) return;
+    
+    try {
+        const response = await fetch(`get_locations.php?action=get_streets&region=${encodeURIComponent(selectedRegion)}&district=${encodeURIComponent(selectedDistrict)}&ward=${encodeURIComponent(selectedWard)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            result.data.forEach(street => {
+                const option = document.createElement('option');
+                option.value = street.name;
+                option.textContent = street.name;
+                villageSelect.appendChild(option);
+            });
+            
+            console.log('Loaded ' + result.data.length + ' streets for ' + selectedWard);
+        } else {
+            console.error('Failed to load streets:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading streets:', error);
+    }
+}
 </script>
 
 <?php require_once '../../includes/footer.php'; ?>
