@@ -1,7 +1,0 @@
-[12-Dec-2025 10:49:40 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[12-Dec-2025 10:49:56 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[17-Dec-2025 11:39:55 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[17-Dec-2025 12:01:52 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[17-Dec-2025 12:04:21 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[17-Dec-2025 12:13:20 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous
-[17-Dec-2025 12:13:41 Africa/Dar_es_Salaam] Error fetching tax types: SQLSTATE[23000]: Integrity constraint violation: 1052 Column 'company_id' in WHERE is ambiguous

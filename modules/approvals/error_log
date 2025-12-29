@@ -1,2 +1,0 @@
-[17-Dec-2025 17:10:31 Africa/Dar_es_Salaam] Error creating journal entry: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'reference_type' in 'INSERT INTO'
-[17-Dec-2025 17:18:49 Africa/Dar_es_Salaam] Error creating journal entry: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'reference_type' in 'INSERT INTO'
